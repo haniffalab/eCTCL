@@ -21,6 +21,8 @@ renv/
 
 # Intermediate files and folders
 .snakemake
+workflow/
+
 # Output files from R CMD build
 /*.tar.gz
 # Output files from R CMD check
