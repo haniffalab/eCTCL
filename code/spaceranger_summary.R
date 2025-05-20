@@ -4,7 +4,7 @@
 # title: Summarise and visualise aggregated Ranger metrics.
 #
 # created: 2024-12-06 Fri 10:17:38 GMT
-# updated: 2024-12-06
+# updated: 2025-01-15
 # version: 0.0.9
 # status: Prototype
 # project: Cutaneous T-cell Lymphoma (CTCL)
@@ -38,6 +38,27 @@ logger <- function(i, tail_n = 60, color = crayon::cyan) {
 # https://pakillo.github.io/grateful/index.html
 
 # In-house/developing --------------------------------------
+plot_heatmap <- function(x_matrix) {
+  x_matrix %>%
+    dplyr::as_tibble() %>%
+    dplyr::mutate(COMPARE = rownames(x_matrix)) %>%
+    tidyr::pivot_longer(-COMPARE, names_to = "QUERY", values_to = "value") %>%
+    dplyr::filter(!is.na(value)) %>%
+    dplyr::mutate(
+      COMPARE = factor(COMPARE, levels = colnames(x_matrix)),
+      QUERY = factor(QUERY, levels = colnames(x_matrix))
+    ) %>%
+    ggplot2::ggplot(mapping = ggplot2::aes(x = QUERY, y = COMPARE)) +
+    ggplot2::geom_tile(mapping = ggplot2::aes(fill = value)) +
+    ggplot2::geom_text(mapping = ggplot2::aes(label = gsub("^0", "", round(value, 2)))) +
+    ggplot2::scale_fill_gradient(low = "white", high = "red") +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(angle = 90, hjust = 1),
+      axis.title = ggplot2::element_blank(),
+      legend.title = ggplot2::element_blank()
+    )
+}
 # Tool (packaged) modules ----------------------------------
 # optparse, tidyverse (ggplot2, dplyr, stringr (glue), readr)
 
@@ -89,7 +110,14 @@ metrics_files <- inputs_file %>%
   stringr::str_subset("0032785|FFPE") %>%
   list.files(pattern = "metrics_summary.csv", full.names = TRUE)
 
+panel_files <- inputs_file %>%
+  list.dirs(recursive = FALSE) %>%
+  stringr::str_subset("0032785|FFPE") %>%
+  list.files(pattern = "gene_panel.json", full.names = TRUE)
+
+# reading json files
 metrics_df <- metrics_files %>% readr::read_csv()
+panel_info <- panel_files %>% purrr::map(jsonlite::fromJSON)
 
 ## Pre-processing ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%
 # remove columns with all NAs
@@ -100,29 +128,68 @@ outputs_list[["table"]] <- metrics_df
 # Plotting numeric metrics
 temp <- sapply(metrics_df, function(x) is.numeric(x) || is.integer(x))
 plot_columns <- colnames(metrics_df)[temp]
-# divide by target genes
-for (i in colnames(metrics_df)) {
-  if (grepl("gene", i)) {
-    temp <- ifelse(grepl("Oncology", metrics_df$panel_name), 380, 260)
-    metrics_df[[i]] <- metrics_df[[i]] / temp
+# divide by target genes (panel size)
+panel_size <- sapply(panel_info, function(x) x$payload$panel$num_gene_targets )
+for (i in plot_columns) {
+  if (grepl("gene|transcript", i)) {
+    cat(glue("Normalising '{i}' by panel size\n\n"))
+    metrics_df[[glue("{i}_by_panel_size")]] <- metrics_df[[i]] / panel_size
   }
 }
 
+# also grabbing the normalised columns
+temp <- grep("_by_panel_size", colnames(metrics_df), value = TRUE)
+plot_columns <- unique(c(plot_columns, temp))
+
+# Plotting bar plots for each metric
 for (col in plot_columns) {
   temp <- gsub("_", "-", col)
-  fname <- glue("barplot_sample_{temp}")
+  fname <- glue("barplot_{temp}")
   # creating bar plots
   plot_aes <- ggplot2::aes(x = region_name, y = !!rlang::sym(col))
   outputs_list[[fname]] <- ggplot2::ggplot(
     data = metrics_df, mapping = plot_aes
   ) +
     ggplot2::geom_bar(stat = "identity") +
-    ggplot2::facet_wrap(facets = ~run_name, scale = "free_x") +
+    ggplot2::facet_wrap(facets = ~run_name + panel_name, scale = "free_x") +
     ggplot2::theme_minimal() +
     ggplot2::theme(
       axis.text.x = ggplot2::element_text(vjust = 0.5, angle = 90)
     )
 }
+
+logger("Checkig overlap between panels")
+n_targets <- max(sapply(
+  panel_info, function(x) x$payload$panel$num_gene_targets
+))
+out_df <- sapply(panel_info, function(x) {
+  x$payload$targets$type$data$id[1:n_targets]
+}) %>% as.data.frame()
+colnames(out_df) <- metrics_df$region_name
+temp <- c(colnames(out_df)) # , "All"
+overlaps_comb <- matrix(nrow = length(temp), ncol = length(temp))
+dimnames(overlaps_comb) <- list(temp, temp)
+overlaps_comb_pct <- overlaps_comb
+for (i in seq_len(ncol(out_df))) {
+  for (j in seq_len(ncol(overlaps_comb))) {
+    if (i == j) next
+    i_values <- out_df[, i][!is.na(out_df[, i])]
+    if (j == ncol(overlaps_comb)) {
+      j_values <- unique(unlist(out_df[, -i][!is.na(out_df[, -i])]))
+    } else {
+      j_values <- out_df[, j][!is.na(out_df[, j])]
+    }
+    overlaps_comb_pct[i, j] <- sum(i_values %in% j_values) / length(i_values)
+    overlaps_comb[i, j] <- intersect(i_values, j_values) %>% length()
+  }
+}
+
+panel_intersection <- intersect(out_df[, 1], out_df[, ncol(out_df)])
+temp <- !panel_info[[1]]$payload$targets$type$data$id %in% panel_intersection
+head(panel_info[[1]]$payload$targets$type$data[temp, 2])
+
+outputs_list[["overlap"]] <- plot_heatmap(overlaps_comb)
+outputs_list[["overlap-percentages"]] <- plot_heatmap(overlaps_comb_pct)
 
 ## Conclusions ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 temp <- paste0(names(outputs_list), collapse = "\n")
@@ -148,7 +215,8 @@ for (name_i in names(outputs_list)) {
   if (any(class(item) %in% c("gg", "ggplot", "spec_tbl_df"))) {
     suppressMessages(ggplot2::ggsave(
       filename = paste0(fname, ".pdf"),
-      plot = outputs_list[[name_i]]
+      plot = outputs_list[[name_i]],
+      width = 10, height = 10
     ))
     eflag <- pflag
   } else if (any(class(item) %in% c("data.frame"))) {

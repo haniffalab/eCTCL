@@ -32,13 +32,8 @@ echo "Working at: '${WORKDIR}'"
 
 # Run name and the samples
 RNAME=20240815__115640__SGP177_SKI_run1
-RNAME=20241115__150035__SGP206_run1
-SNAMES=$(ls data/${RNAME}/)
-
-# Run QC aggregation of Ranger results
-Rscript code/spaceranger_summary.R \
-  --name ${RNAME} \
-  --input data/${RNAME}
+# RNAME=20241115__150035__SGP206_run1
+SNAMES=($(ls -d data/${RNAME}/* | grep --color=never _AX))
 
 ## Pre-processing ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 mkdir -p analysis/quality_control
@@ -46,30 +41,35 @@ mkdir -p code/quality_control
 
 ## Main ## %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 for SNAME in ${SNAMES[@]}; do
-  NNAME=${SNAME/*35__/}
-  NNAME=${NNAME/__20*/}
+  NNAME0=$(basename ${SNAME})
+  # remove leading and trailing numbers
+  NNAME=$(echo ${NNAME0} | sed -e 's/.*[0-9]__\([A-Z]\)\(.*\)/\1\2/g')
+  NNAME=${NNAME/__*/}
   echo -e "=============== \033[0;32m${NNAME}\033[0m"
   EXECF=code/quality_control/${NNAME}.sh
-  NBIN=analysis/qc_template.ipynb
-  NBOUT=analysis/quality_control/${NNAME}.ipynb
   if [[ -f ${WORKDIR}/../logs/QC_${NNAME}.err ]]; then
     rm ${WORKDIR}/../logs/QC_${NNAME}* # remove previous logs
     rm ${NBOUT} # remove previous QC
   fi
-  echo  "#!/usr/bin/env bash" > ${EXECF}
-  echo  "" >> ${EXECF}
-  echo  "if [[ ~/.conda/init.sh ]]; then" >> ${EXECF}
-  echo  "  . ~/.conda/init.sh" >> ${EXECF}
-  echo  "fi" >> ${EXECF}
-  echo  "mamba activate squidpy_v1.4.1" >> ${EXECF}
-  echo  "papermill ${NBIN} ${NBOUT} -p indata_name \"${NNAME}\"" >> ${EXECF}
+  # Creating bash script to run the QC # -------------------
+  echo "#!/usr/bin/env bash" > ${EXECF}
+  echo "" >> ${EXECF}
+  echo "if [[ ~/.conda/init.sh ]]; then" >> ${EXECF}
+  echo "  . ~/.conda/init.sh" >> ${EXECF}
+  echo "fi" >> ${EXECF}
+  echo -e "mamba activate squidpy_v1.4.1\n" >> ${EXECF}
+  echo "NBIN=analysis/qc_template.ipynb" >> ${EXECF}
+  echo "NBOUT=analysis/quality_control/${NNAME}.ipynb" >> ${EXECF}
+  echo "SPATH=${RNAME}/${NNAME0}" >> ${EXECF}
+  echo "papermill \${NBIN} \${NBOUT} -p sample_path \"\${SPATH}\"" >> ${EXECF}
   chmod +x ${EXECF}
   bsub -G team298 \
-    -o ${WORKDIR}/../logs/QC_${NNAME}.log \
-    -e ${WORKDIR}/../logs/QC_${NNAME}.err \
+    -o ${WORKDIR}/../logs/QC_${NNAME}_$(date '+%Y-%m-%d').out \
+    -e ${WORKDIR}/../logs/QC_${NNAME}_$(date '+%Y-%m-%d').err \
     -Is -n1 -q normal \
-    -R "select[mem>8000] rusage[mem=8000]" -M8000 \
-    -W7:30 -J "QC_${NNAME}" ${EXECF} &
+    -R "select[mem>6000] rusage[mem=6000]" -M6000 \
+    -W7:30 -J "QC_${NNAME}" ${EXECF} #&
+  break
 done
 
 
