@@ -10,6 +10,7 @@ logs/
 **log
 **out
 **archive/
+**.ipynb.py
 
 # Environment files
 .Renviron
