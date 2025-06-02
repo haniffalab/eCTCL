@@ -12,26 +12,56 @@
 # ------------------------------------------------------------------------------
 
 mkdir -p data/raw
+SCRIPT_DIR="$([ -z "${PS1}" ] && echo $(realpath $(dirname $0)) || echo $(pwd))"
+echo "Working at: '${SCRIPT_DIR}'"
 
 ############################################################
 ## Xenium data #############################################
 ############################################################
 
+function hidden_vars() {
+  # This function is used to extract hidden variables from a file.
+  # It uses sed to match the pattern and extract the value.
+  grep -E "^${1}:" ${SCRIPT_DIR}/data/variables.txt | \
+    sed -E "s/${1}:(.*)/\1/" | tr -d '[:space:]'
+}
 
+PATH_IMAGING=$(hidden_vars PATH_IMAGING)
 DATA_PATHS=(
-  /nfs/t298_imaging/0XeniumExports/20240815_SGP177_hSkin_CTCL
-  /nfs/t298_imaging/0XeniumExports/20241115_SGP206_hImmunoOnc_CTCL_WARTS
+  "${PATH_IMAGING}/20240815_SGP177_hSkin_CTCL"
+  "${PATH_IMAGING}/20241115_SGP206_hImmunoOnc_CTCL_WARTS"
 )
 DTYPE=xenium
+SFILTER="AX.*SKI|P677|p677"
 
 for DATA_PATH in "${DATA_PATHS[@]}"; do
-  LPATH=${WORKDIR}/data/raw/CTCL_${DTYPE}
+  SPATHS=($(ls -d ${DATA_PATH}/*output* --color=never | grep -E "${SFILTER}"))
+  LPATH=${SCRIPT_DIR}/data/raw/${DTYPE}_CTCL
   mkdir -p ${LPATH}
-  for SPATH in `ls -d ${DATA_PATH}/*/output* --color=never`; do
-    SPATH1=${LPATH}/${SPATH##*/}
-    if [[ -f ${SPATH1} ]]; then
+  for SPATH in ${SPATHS[@]}; do
+    SPATH1=${LPATH}/$(basename ${SPATH})
+    if [[ -L ${SPATH1} ]]; then
       unlink ${SPATH1}
     fi
-    ln -s ${SPATH} ${SPATH1}
+    ln -s ${SPATH/%\//} ${SPATH1}
   done
+done
+
+############################################################
+## Copying data to local machine ###########################
+############################################################
+
+# We are sending the data to a local machine using rsync.
+# This is useful for large datasets that need to be processed locally.
+# We will copy the data from the remote machine to the local machine.
+
+PATH_DATA=($(ls -d ${SCRIPT_DIR}/data/raw/${DTYPE}_CTCL/*))
+# iterate the first three elements of PATH_DATA
+for PATH_I in "${PATH_DATA[@]}"; do
+  echo PATH_I="${PATH_I}"
+  #--dry-run \
+  echo rsync -auvh --progress \
+    --exclude-from='"config/cellranger_exclude.txt"' \
+    "${USER}@${HOSTNAME}:\${PATH_I}/" \
+    "\${PATH_I/#\${SCRIPT_DIR}\//}/"
 done
