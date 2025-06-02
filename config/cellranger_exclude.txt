@@ -1,6 +1,6 @@
-parquet
-.zarr.zip
-.html
+*.parquet
+*.zarr.zip
+*.html
 aux_outputs
 analysis
 cell_feature_matrix
