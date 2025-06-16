@@ -6,7 +6,7 @@
 .Rhistory
 .Rapp.history
 .history
-logs/
+.logs/
 **log
 **out
 **archive/
