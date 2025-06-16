@@ -16,14 +16,16 @@
 
 set -e
 
+PATH_BASE=$([ -z "${PS1}" ] && echo $(dirname $0) || echo code)
 SOURCE_FILES=(
-  "$(dirname $0)/logger.sh"
-  "$(dirname $0)/utils.sh" # PKG_MAN, path_project
+  "${PATH_BASE}/logger.sh"
   "${HOME}/.conda/init.sh"
+  "${PATH_BASE}/utils.sh" # PKG_MAN, path_project
 )
 for SOURCE_FILE in ${SOURCE_FILES[@]}; do
   if [[ -f ${SOURCE_FILE} ]]; then
-    echo "Sourcing ${SOURCE_FILE}"
+    TEMP="Sourcing '${SOURCE_FILE}'"
+    [ $(type -t logger) == function ] && logger "${TEMP}" 60 || logger -s "${TEMP}"
     source ${SOURCE_FILE}
   fi
 done

@@ -17,14 +17,15 @@
 
 set -e
 
+PATH_BASE=$([ -z "${PS1}" ] && echo $(dirname $0) || echo code)
 SOURCE_FILES=(
-  "$(dirname $0)/logger.sh" # logger
-  "$(dirname $0)/utils.sh"  # path_project, hidden_vars
+  "${PATH_BASE}/logger.sh" # logger
+  "${PATH_BASE}/utils.sh"  # path_project, hidden_vars
 )
 for SOURCE_FILE in ${SOURCE_FILES[@]}; do
   if [[ -f ${SOURCE_FILE} ]]; then
     TEMP="Sourcing '${SOURCE_FILE}'"
-    [ -f "$(which logger)" ] && logger -s ${TEMP} || logger ${TEMP}
+    [ $(type -t logger) == function ] && logger "${TEMP}" 60 || logger -s "${TEMP}"
     source ${SOURCE_FILE}
   fi
 done
