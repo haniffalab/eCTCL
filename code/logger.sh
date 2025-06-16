@@ -24,7 +24,7 @@ function logger() {
 }
 
 function logger_warn() {
-    logger "${1}" "${2:-60}" "${3:-#}" "\033[1;33mWARNING\033[0m"
+    logger "${1}" "${2:-60}" "${3:-#}" "\033[1;33mWARN\033[0m"
 }
 function logger_error() {
     logger "${1}" "${2:-60}" "${3:-#}" "\033[1;31mERROR\033[0m"

@@ -38,8 +38,8 @@ declare -A  GIT_REPOS=(
   ['celltypist']="git@github.com:cramsuig/sc2sp_benchmark.git"
 )
 
-logger "Working at: '$(echo ${PWD} | sed 's|'"${HOME}"'|~|')'"
-logger "Project: '$(echo ${SCRIPT_DIR} | sed 's|'"${HOME}"'|~|')'"
+logger "Working at: '$(echo ${PWD} | sed 's|'"${HOME}"'|~|')'" 0
+logger "Project: '$(echo ${SCRIPT_DIR} | sed 's|'"${HOME}"'|~|')'" 0
 mkdir -p "${SCRIPT_DIR}/envs"
 
 ################################################################################
@@ -59,14 +59,16 @@ logger "Downloading repositories" ##########################
 ############################################################
 
 for ENV_NAME in ${!GIT_REPOS[@]}; do
-  REPO_NAME=$(basename "${GIT_REPOS[${ENV_NAME}]}" .git)
-  if [[ ! -d "${SCRIPT_DIR}/../${REPO_NAME}" ]]; then
+  REPO_PATH="${SCRIPT_DIR}/../$(basename "${GIT_REPOS[${ENV_NAME}]}" .git)"
+  REPO_PATH="$(realpath ${REPO_PATH})"
+  if [[ ! -d "${REPO_PATH}" ]]; then
     logger "Cloning repository '${REPO_NAME}'" 60
-    git clone "${REPO}" "${SCRIPT_DIR}/../${REPO_NAME}"
+    # git clone "${REPO}" "${REPO_PATH}"
   fi
   # Linking environment files to the envs directory
-  ENV_FILE="${SCRIPT_DIR}/../${REPO_NAME}/envs/${ENV_NAME}.yaml"
-  ln -s "${ENV_FILE}" "${SCRIPT_DIR}/envs/${ENV_NAME}.yaml"
+  ENV_FILE0="${REPO_PATH}/envs/${ENV_NAME}.yaml"
+  ENV_FILE1="${SCRIPT_DIR}/envs/${ENV_NAME}.yaml"
+  [ ! -L ${ENV_FILE1} ] && ln -s "${ENV_FILE0}" "${ENV_FILE1}"
 done
 
 ############################################################
@@ -75,12 +77,12 @@ logger "Creating environmets" ##############################
 
 find ${SCRIPT_DIR}/envs/ -name "*.yaml" | while read -r ENV_FILE; do
   ENV_NAME=$(grep -E "^name:" "${ENV_FILE}" | awk '{print $2}')
-  if ${PKG_MAN} env list | grep -q "^${ENV_NAME} "; then
-    echo "Environment '${ENV_NAME}' already exists, skipping."
+  if ${PKG_MAN} env list | grep -q " ${ENV_NAME} "; then
+    logger_warn "Environment '${ENV_NAME}' already exists, skipping."
     continue
   fi
-  logger "Creating environment '${ENV_NAME}' from '${ENV_FILE}'"
-  ${PKG_MAN} env create -f "${ENV_FILE}" --name "${ENV_NAME}"
+  logger "Creating environment '${ENV_NAME}' from '${ENV_FILE}'" 0
+  ${PKG_MAN} env create --file "${ENV_FILE}" --name "${ENV_NAME}" --quiet
 done
 
 ############################################################
@@ -90,14 +92,14 @@ logger "Adding kernels" ####################################
 find ${SCRIPT_DIR}/envs/ -name "*.yaml" | while read -r ENV_FILE; do
   ENV_NAME=$(grep -E "^name:" "${ENV_FILE}" | awk '{print $2}')
   if jupyter kernelspec list | grep -q " ${ENV_NAME} "; then
+    logger_warn "Kernel '${ENV_NAME}' already exists, skipping." 0
+  else
     ${PKG_MAN} activate ${ENV_NAME}
-    if [[ $(${PKG_MAN} list | grep "^ipykernel" | wc -l) -eq 0 ]]; then
-      ${PKG_MAN} install -y ipykernel
+    if [[ "$(${PKG_MAN} list | grep "^ipykernel" | wc -l)" -eq 0 ]]; then
+      ${PKG_MAN} install -y ipykernel --quiet
     fi
     python -m ipykernel install --user --name ${ENV_NAME} \
       --display-name "${ENV_NAME}" --user
-  else
-    echo "Kernel '${ENV_NAME}' already exists, skipping."
   fi
 done
 
