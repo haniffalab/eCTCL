@@ -13,8 +13,10 @@
 # Set up environment handling variables
 # mamba, conda, uv, etc.
 if [[ ! -z "$(command -v mamba)" ]]; then
+  echo "Using mamba as the package manager"
   PKG_MAN="mamba"
 elif [[ ! -z "$(command -v conda)" ]]; then
+  echo "Using conda as the package manager"
   PKG_MAN="conda"
 elif [[ ! -z "$(command -v uv)" ]]; then
   PKG_MAN="uv"
