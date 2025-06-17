@@ -15,7 +15,7 @@
 ## Environment setup ###########################################################
 ################################################################################
 
-set -e
+# set -e
 
 PATH_BASE=$([ -z "${PS1}" ] && echo $(dirname $0) || echo code)
 SOURCE_FILES=(
@@ -34,58 +34,81 @@ done
 logger "Global configuration" ##################################################
 ################################################################################
 
-SCRIPT_DIR="$(path_project)"
-echo "Working at: '${SCRIPT_DIR}'"
+PATH_PROJECT="$(path_project)"
+PATH_SCRATCH="$(hidden_vars "PATH_SCRATCH" "${PATH_PROJECT}/data/variables.txt")"
 
-mkdir -p data/raw
-mkdir -p data/processed
+logger "Working at: '${PATH_PROJECT}'"
+
+PATH_MKDIR=("data/raw" "data/processed" "src")
+for DIR in "${PATH_MKDIR[@]}"; do
+  mkdir -p "${PATH_PROJECT}/${DIR}"
+  mkdir -p "${PATH_SCRATCH}/${DIR}"
+done
 
 ################################################################################
 logger "Main" ##################################################################
 ################################################################################
 
-
 ############################################################
-logger Xenium data 60 ######################################
+logger "Xenium data" 60 ####################################
 ############################################################
 
-PATH_IMAGING="$(hidden_vars "PATH_IMAGING" "${SCRIPT_DIR}/data/variables.txt")"
+PATH_IMAGING="$(hidden_vars "PATH_IMAGING" "${PATH_PROJECT}/data/variables.txt")"
 DATA_PATHS=(
   "${PATH_IMAGING}/20240815_SGP177_hSkin_CTCL"
   "${PATH_IMAGING}/20241115_SGP206_hImmunoOnc_CTCL_WARTS"
+  "${PATH_IMAGING}/20250227_SGP218_5K_BCN+CTCL_FFPE/CTCL FFPE"
 )
 DTYPE=xenium
+DNAME="CTCL"
+LPATH=${PATH_SCRATCH}/data/raw/${DTYPE}_${DNAME}
 SFILTER="AX.*SKI|P677|p677"
 
+mkdir -p ${LPATH}
 for DATA_PATH in "${DATA_PATHS[@]}"; do
-  SPATHS=($(ls -d ${DATA_PATH}/*output* --color=never | grep -E "${SFILTER}"))
-  LPATH=${SCRIPT_DIR}/data/raw/${DTYPE}_CTCL
-  mkdir -p ${LPATH}
-  for SPATH in ${SPATHS[@]}; do
-    SPATH1=${LPATH}/$(basename ${SPATH})
-    if [[ -L ${SPATH1} ]]; then
-      unlink ${SPATH1}
+  logger "Copying '$(basename "${DATA_PATH}")'" 60 "-"
+  CCOUNT=0; DCOUNT=0
+  while read -r SPATH;
+  do
+    DCOUNT=$(($DCOUNT + 1))
+    logger " * $(basename "${SPATH}")" 0
+    if [[ -d "${LPATH}/$(basename "${SPATH}")" ]]; then
+      echo present
     fi
-    ln -s ${SPATH/%\//} ${SPATH1}
-  done
+    # can't access it from a node, so we need to copy instead of link
+    # ln -s "${SPATH/%\//}" "${SPATH1}"
+    rsync -auvh --progress --exclude "analysis" "${SPATH/%\//}" "${LPATH}/"
+    CCOUNT=$(($CCOUNT + 1))
+  done <<< "$(
+    find "${DATA_PATH}" -maxdepth 1 -name "*output*" -type d | grep -E "${SFILTER}"
+    )"
+  printf "${CCOUNT}/${DCOUNT} copied '${LPATH}'\n"
 done
+if [[ ! -L "${PATH_PROJECT}/data/raw/${DTYPE}_${DNAME}" ]]; then
+  logger "Linking scratch data to project" 0
+  ln -s "${PATH_SCRATCH}/data/raw/${DTYPE}_${DNAME}" \
+    "${PATH_PROJECT}/data/raw/"
+fi
 
 ############################################################
-logger Copying data to local machine 60 ####################
+logger "Commands to copy data to local machine" 60 #########
 ############################################################
 
-# We are sending the data to a local machine using rsync.
-# This is useful for large datasets that need to be processed locally.
-# We will copy the data from the remote machine to the local machine.
+TEMP="${PATH_PROJECT}/src/cellranger_rsync.sh"
+printf '
+We are sending the data to a local machine using rsync.
+Copying data to local machine commands: "'${TEMP}'".\n
+'
 
-PATH_DATA=($(ls -d ${SCRIPT_DIR}/data/raw/${DTYPE}_CTCL/*))
+echo "#!/usr/bin/env bash" > "${TEMP}"
+PATH_DATA=($(ls -d ${PATH_PROJECT}/data/raw/${DTYPE}_${DNAME}/*))
 # iterate the first three elements of PATH_DATA
 for PATH_I in "${PATH_DATA[@]}"; do
-  echo PATH_I="${PATH_I}"
+  echo PATH_I="${PATH_I}" >> "${TEMP}"
   echo rsync -auvh --progress \
     --exclude-from='"config/cellranger_exclude.txt"' \
     "${USER}@${HOSTNAME}:\${PATH_I}/" \
-    "\${PATH_I/#\${SCRIPT_DIR}\//}/"
+    "\${PATH_I/#\${PATH_PROJECT}\//}/" >> "${TEMP}"
 done
 
 ############################################################
@@ -93,10 +116,21 @@ logger "Fetch suspension data" 60 ##########################
 ############################################################
 
 URL="https://storage.googleapis.com/haniffalab/ctcl/CTCL_all_final_portal_tags.h5ad"
-PATH_DATA="${SCRIPT_DIR}/data/processed/Ruoyan_2024_suspension.h5ad"
+PATH_DATA="${PATH_SCRATCH}/data/processed/Ruoyan_2024_suspension.h5ad"
 
-if [[ -z "$(command -v wget)" ]]; then
-  curl "${URL}" --output "${PATH_DATA}"
-else
-  wget "${URL}" --output-file "${PATH_DATA}"
+if [[ ! -f "${PATH_DATA}" ]]; then
+  if [[ -z "$(command -v wget)" ]]; then
+    logger "Downloading data using curl" 0
+    curl "${URL}" --output "${PATH_DATA}"
+  else
+    logger "Downloading data using wget" 0
+    wget "${URL}" --output-file "${PATH_DATA}"
+  fi
 fi
+if [[ ! -f "${PATH_PROJECT}/data/processed/Ruoyan_2024_suspension.h5ad" ]]; then
+  logger "Linking suspension data to project" 0
+  ln -s "${PATH_SCRATCH}/data/processed/Ruoyan_2024_suspension.h5ad" \
+    "${PATH_PROJECT}/data/processed/"
+fi
+
+logger "Data setup completed"
