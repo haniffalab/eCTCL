@@ -1,0 +1,6 @@
+name: env_r
+channels:
+  - conda-forge
+dependencies:
+  - r-base
+  - r-essentials
