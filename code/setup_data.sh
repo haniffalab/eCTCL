@@ -81,7 +81,7 @@ for DATA_PATH in "${DATA_PATHS[@]}"; do
     CCOUNT=$(($CCOUNT + 1))
   done <<< "$(
     find "${DATA_PATH}" -maxdepth 1 -name "*output*" -type d | grep -E "${SFILTER}"
-    )"
+  )"
   printf "${CCOUNT}/${DCOUNT} copied '${LPATH}'\n"
 done
 if [[ ! -L "${PATH_PROJECT}/data/raw/${DTYPE}_${DNAME}" ]]; then
@@ -116,7 +116,7 @@ logger "Fetch suspension data" 60 ##########################
 ############################################################
 
 URL="https://storage.googleapis.com/haniffalab/ctcl/CTCL_all_final_portal_tags.h5ad"
-PATH_DATA="${PATH_SCRATCH}/data/processed/Ruoyan_2024_suspension.h5ad"
+PATH_DATA="${PATH_SCRATCH}/data/processed/ruoyan_2024_suspension.h5ad"
 
 if [[ ! -f "${PATH_DATA}" ]]; then
   if [[ -z "$(command -v wget)" ]]; then
@@ -124,13 +124,12 @@ if [[ ! -f "${PATH_DATA}" ]]; then
     curl "${URL}" --output "${PATH_DATA}"
   else
     logger "Downloading data using wget" 0
-    wget "${URL}" --output-file "${PATH_DATA}"
+    wget "${URL}" --output-document "${PATH_DATA}"
   fi
 fi
-if [[ ! -f "${PATH_PROJECT}/data/processed/Ruoyan_2024_suspension.h5ad" ]]; then
+if [[ ! -L "${PATH_PROJECT}/data/processed/$(basename ${PATH_DATA})" ]]; then
   logger "Linking suspension data to project" 0
-  ln -s "${PATH_SCRATCH}/data/processed/Ruoyan_2024_suspension.h5ad" \
-    "${PATH_PROJECT}/data/processed/"
+  ln -s "${PATH_DATA}" "${PATH_PROJECT}/data/processed/"
 fi
 
 logger "Data setup completed"

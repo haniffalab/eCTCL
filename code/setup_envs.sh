@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 # __title: Setting up project environments.
 # created: 2025-06-04 Wed 09:20:29 BST
-# updated: 2025-06-04
+# updated: 2025-06-16 Mon 12:19:55 BST
 # author:
 #   - name: Ciro Ramírez-Suástegui
 #     affiliation: The Wellcome Sanger Institute
@@ -41,6 +41,7 @@ declare -A  GIT_REPOS=(
 logger "Working at: '$(echo ${PWD} | sed 's|'"${HOME}"'|~|')'" 0
 logger "Project: '$(echo ${SCRIPT_DIR} | sed 's|'"${HOME}"'|~|')'" 0
 mkdir -p "${SCRIPT_DIR}/envs"
+mkdir -p "${SCRIPT_DIR}/.logs"
 
 ################################################################################
 ## Main ########################################################################
@@ -77,12 +78,16 @@ logger "Creating environmets" ##############################
 
 find ${SCRIPT_DIR}/envs/ -name "*.yaml" | while read -r ENV_FILE; do
   ENV_NAME=$(grep -E "^name:" "${ENV_FILE}" | awk '{print $2}')
+  ENV_LOG="$(echo "${ENV_FILE/%.*/}" | sed 's|'"${SCRIPT_DIR}/"'||' | tr '/' '.')"
+  ENV_LOG=".logs/${ENV_LOG}_$(date +%Y%m%d%H%M%S)"
+  logger "'${ENV_NAME}' from '${ENV_FILE}'" 0
   if ${PKG_MAN} env list | grep -q " ${ENV_NAME} "; then
     logger_warn "Environment '${ENV_NAME}' already exists, skipping."
     continue
   fi
-  logger "Creating environment '${ENV_NAME}' from '${ENV_FILE}'" 0
-  ${PKG_MAN} env create --file "${ENV_FILE}" --name "${ENV_NAME}" --quiet
+  echo "Logging to: '${ENV_LOG}'"
+  ${PKG_MAN} env create -y --file "${ENV_FILE}" \
+    --name "${ENV_NAME}" 2>&1 > "${ENV_LOG}"
 done
 
 ############################################################
