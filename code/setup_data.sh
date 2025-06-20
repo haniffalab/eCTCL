@@ -15,7 +15,7 @@
 ## Environment setup ###########################################################
 ################################################################################
 
-# set -e
+set -e
 
 PATH_BASE=$([ -z "${PS1}" ] && echo $(dirname $0) || echo code)
 SOURCE_FILES=(
@@ -36,6 +36,7 @@ logger "Global configuration" ##################################################
 
 PATH_PROJECT="$(path_project)"
 PATH_SCRATCH="$(hidden_vars "PATH_SCRATCH" "${PATH_PROJECT}/data/variables.txt")"
+PATH_SCRATCH="${PATH_SCRATCH}/$(basename ${PATH_PROJECT})"
 
 logger "Working at: '${PATH_PROJECT}'"
 

@@ -25,7 +25,7 @@ fi
 function hidden_vars() {
   # This function is used to extract hidden variables from a file.
   # grep -E "^${1}:" ${2} | sed -E "s/${1}:(.*)/\1/" | tr -d '[:space:]'
-  grep -E "^${1}:" ${2} | awk '{print $2}' | tr -d '[:space:]'
+  grep -E "^${1}:" ${2} | awk -F: '{print $2}'
 }
 
 function path_project() {

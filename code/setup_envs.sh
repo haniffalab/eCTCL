@@ -52,23 +52,29 @@ if [[ -z "$(command -v jupyter)" ]]; then
   logger "Installing JupyterLab"
   ${PKG_MAN} install -y jupyterlab
 else
-  logger "JupyterLab is already installed"
+  logger "JupyterLab is already installed" 0
 fi
 
 ############################################################
 logger "Downloading repositories" ##########################
 ############################################################
 
+# Make sure the git repositories are cloned
+# then link the environment files to the envs directory in this project
 for ENV_NAME in ${!GIT_REPOS[@]}; do
   REPO_PATH="${SCRIPT_DIR}/../$(basename "${GIT_REPOS[${ENV_NAME}]}" .git)"
-  REPO_PATH="$(realpath ${REPO_PATH})"
   if [[ ! -d "${REPO_PATH}" ]]; then
-    logger "Cloning repository '${REPO_NAME}'" 60
-    # git clone "${REPO}" "${REPO_PATH}"
+    logger "Cloning repository '$(basename ${REPO_PATH})'" 60
+    git clone "${GIT_REPOS[${ENV_NAME}]}" "${REPO_PATH}"
   fi
+  REPO_PATH="$(realpath ${REPO_PATH})"
   # Linking environment files to the envs directory
   ENV_FILE0="${REPO_PATH}/envs/${ENV_NAME}.yaml"
   ENV_FILE1="${SCRIPT_DIR}/envs/${ENV_NAME}.yaml"
+  [ -f "${ENV_FILE0}" ] || {
+    logger_warn "No environment file '${ENV_FILE0}'"
+    continue
+  }
   [ ! -L ${ENV_FILE1} ] && ln -s "${ENV_FILE0}" "${ENV_FILE1}"
 done
 
@@ -79,7 +85,7 @@ logger "Creating environmets" ##############################
 find ${SCRIPT_DIR}/envs/ -name "*.yaml" | while read -r ENV_FILE; do
   ENV_NAME=$(grep -E "^name:" "${ENV_FILE}" | awk '{print $2}')
   ENV_LOG="$(echo "${ENV_FILE/%.*/}" | sed 's|'"${SCRIPT_DIR}/"'||' | tr '/' '.')"
-  ENV_LOG=".logs/${ENV_LOG}_$(date +%Y%m%d%H%M%S)"
+  ENV_LOG=".logs/${ENV_LOG}_$(date +%Y%m%d%H%M%S)" # keep a log of creation
   logger "'${ENV_NAME}' from '${ENV_FILE}'" 0
   if ${PKG_MAN} env list | grep -q " ${ENV_NAME} "; then
     logger_warn "Environment '${ENV_NAME}' already exists, skipping."
@@ -100,7 +106,7 @@ find ${SCRIPT_DIR}/envs/ -name "*.yaml" | while read -r ENV_FILE; do
     logger_warn "Kernel '${ENV_NAME}' already exists, skipping." 0
   else
     ${PKG_MAN} activate ${ENV_NAME}
-    if [[ "$(${PKG_MAN} list | grep "^ipykernel" | wc -l)" -eq 0 ]]; then
+    if [[ "$(${PKG_MAN} list | grep "ipykernel " | wc -l)" -eq 0 ]]; then
       ${PKG_MAN} install -y ipykernel --quiet
     fi
     python -m ipykernel install --user --name ${ENV_NAME} \
