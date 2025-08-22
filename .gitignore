@@ -6,10 +6,9 @@
 .Rhistory
 .Rapp.history
 .history
-.logs/
-**log
+**log*
 **out
-**archive/
+**archive
 **.ipynb.py
 
 # Environment files

@@ -14,104 +14,99 @@
 ## Environment setup ###########################################################
 ################################################################################
 
-set -e
+# set -euo pipefail
+set -o ignoreeof
+shopt -s expand_aliases
+alias logger_info='logger -t "INFO [$(basename $0):$LINENO)]" -s'
 
-PATH_BASE=$([ -z "${PS1}" ] && echo $(dirname $0) || echo code)
+export PATH_BASE=$([ -z "${PS1}" ] && echo $(dirname $0) || echo code)
+logger_info "Using base path: ${PATH_BASE}"
 SOURCE_FILES=(
-  "${PATH_BASE}/logger.sh"
+  "${PATH_BASE}/logger.sh" # logger_info
+  "${PATH_BASE}/utils.sh" # PKG_MAN, file_sync, path_project
+  "${PATH_BASE}/utils_setup.sh" # setup_envs_*
   "${HOME}/.conda/init.sh"
-  "${PATH_BASE}/utils.sh" # PKG_MAN, path_project
 )
+
 for SOURCE_FILE in ${SOURCE_FILES[@]}; do
-  if [[ -f ${SOURCE_FILE} ]]; then
-    TEMP="Sourcing '${SOURCE_FILE}'"
-    [ $(type -t logger) == function ] && logger "${TEMP}" 60 || logger -s "${TEMP}"
-    source ${SOURCE_FILE}
-  fi
+  logger_info "Sourcing '${SOURCE_FILE}'"
+  source ${SOURCE_FILE} || {
+    echo "File does not exists." >&2
+    exit 1
+  }
+  file_sync "${SOURCE_FILE}" # update project's
+  file_sync "${HOME}/${SOURCE_FILE}" "${SOURCE_FILE}" # update original
 done
 
-# Global configuration
-
-SCRIPT_DIR="$(path_project)"
-declare -A  GIT_REPOS=(
-  ['scqooc']="git@github.com:cramsuig/scqooc.git"
-  ['celltypist']="git@github.com:cramsuig/sc2sp_benchmark.git"
-)
-
-logger "Working at: '$(echo ${PWD} | sed 's|'"${HOME}"'|~|')'" 0
-logger "Project: '$(echo ${SCRIPT_DIR} | sed 's|'"${HOME}"'|~|')'" 0
-mkdir -p "${SCRIPT_DIR}/envs"
-mkdir -p "${SCRIPT_DIR}/.logs"
+shopt -u expand_aliases
 
 ################################################################################
-## Main ########################################################################
+# Global configuration #########################################################
+################################################################################
+
+PATH_PROJECT="$(path_project)"
+declare -A  GIT_REPOS=(
+  ['env_r']="envs/env_r.yaml"
+  ['scqooc']="git@github.com:cramsuig/scqooc.git"
+  ['celltypist']="git@github.com:cramsuig/sc2sp_benchmark.git"
+  ['scanpy']="git@github.com:HCA-integration/scAtlasTb.git"
+  ['rapids_singlecell']="git@github.com:HCA-integration/scAtlasTb.git"
+  ['plots']="git@github.com:HCA-integration/scAtlasTb.git"
+  ['scvi-tools']="git@github.com:HCA-integration/scAtlasTb.git"
+  ['scib_accel']="git@github.com:HCA-integration/scAtlasTb.git"
+  ['scib']="git@github.com:HCA-integration/scAtlasTb.git"
+  ['pegasus']="git@github.com:HCA-integration/scAtlasTb.git"
+  ['funkyheatmap']="git@github.com:HCA-integration/scAtlasTb.git"
+  ['scgen']="git@github.com:HCA-integration/scAtlasTb.git"
+)
+
+logger_info "Working at: '$(secret_path ${PWD})'" 0
+logger_info "Project: '$(secret_path ${PATH_PROJECT})'" 0
+
+################################################################################
+logger_info "Jupyter" ##########################################################
 ################################################################################
 
 # Install JupyterLab and its extensions
 if [[ -z "$(command -v jupyter)" ]]; then
-  logger "Installing JupyterLab"
+  logger_info "Installing JupyterLab"
   ${PKG_MAN} install -y jupyterlab
 else
-  logger "JupyterLab is already installed" 0
+  logger_info "JupyterLab is already installed" 0
+fi
+
+# Extensions - check if installed first
+EXTENSION="nb_black"
+if ! pip list 2>/dev/null | grep -q "${EXTENSION}"; then
+  # ! jupyter labextension list 2>/dev/null | grep -q " ${EXTENSION} "
+  logger_info "Installing JupyterLab extension: ${EXTENSION}"
+  URL="git+https://github.com/leifdenby/nb_black/#egg=nb_black"
+  # python -m pip install "${URL}"
 fi
 
 ############################################################
 logger "Downloading repositories" ##########################
 ############################################################
 
-# Make sure the git repositories are cloned
-# then link the environment files to the envs directory in this project
-for ENV_NAME in ${!GIT_REPOS[@]}; do
-  REPO_PATH="${SCRIPT_DIR}/../$(basename "${GIT_REPOS[${ENV_NAME}]}" .git)"
-  if [[ ! -d "${REPO_PATH}" ]]; then
-    logger "Cloning repository '$(basename ${REPO_PATH})'" 60
-    git clone "${GIT_REPOS[${ENV_NAME}]}" "${REPO_PATH}"
-  fi
-  REPO_PATH="$(realpath ${REPO_PATH})"
-  # Linking environment files to the envs directory
-  ENV_FILE0="${REPO_PATH}/envs/${ENV_NAME}.yaml"
-  ENV_FILE1="${SCRIPT_DIR}/envs/${ENV_NAME}.yaml"
-  [ -f "${ENV_FILE0}" ] || {
-    logger_warn "No environment file '${ENV_FILE0}'"
-    continue
-  }
-  [ ! -L ${ENV_FILE1} ] && ln -s "${ENV_FILE0}" "${ENV_FILE1}"
-done
+source "${PATH_BASE}/utils.sh"
+setup_env_fetch_repos "${PATH_PROJECT}" "GIT_REPOS"
 
 ############################################################
 logger "Creating environmets" ##############################
 ############################################################
 
-find ${SCRIPT_DIR}/envs/ -name "*.yaml" | while read -r ENV_FILE; do
-  ENV_NAME=$(grep -E "^name:" "${ENV_FILE}" | awk '{print $2}')
-  ENV_LOG="$(echo "${ENV_FILE/%.*/}" | sed 's|'"${SCRIPT_DIR}/"'||' | tr '/' '.')"
-  ENV_LOG=".logs/${ENV_LOG}_$(date +%Y%m%d%H%M%S)" # keep a log of creation
-  logger "'${ENV_NAME}' from '${ENV_FILE}'" 0
-  if ${PKG_MAN} env list | grep -q " ${ENV_NAME} "; then
-    logger_warn "Environment '${ENV_NAME}' already exists, skipping."
-    continue
-  fi
-  echo "Logging to: '${ENV_LOG}'"
-  ${PKG_MAN} env create -y --file "${ENV_FILE}" \
-    --name "${ENV_NAME}" 2>&1 > "${ENV_LOG}"
-done
+setup_env_create "${PATH_PROJECT}"
+
+############################################################
+logger_info "R packages" ###################################
+############################################################
+
+source "${PATH_BASE}/setup_envs_r.sh"
 
 ############################################################
 logger "Adding kernels" ####################################
 ############################################################
 
-find ${SCRIPT_DIR}/envs/ -name "*.yaml" | while read -r ENV_FILE; do
-  ENV_NAME=$(grep -E "^name:" "${ENV_FILE}" | awk '{print $2}')
-  if jupyter kernelspec list | grep -q " ${ENV_NAME} "; then
-    logger_warn "Kernel '${ENV_NAME}' already exists, skipping." 0
-  else
-    ${PKG_MAN} activate ${ENV_NAME}
-    if [[ "$(${PKG_MAN} list | grep "ipykernel " | wc -l)" -eq 0 ]]; then
-      ${PKG_MAN} install -y ipykernel --quiet
-    fi
-    python -m ipykernel install --user --name ${ENV_NAME} \
-      --display-name "${ENV_NAME}" --user
-  fi
-done
+setup_env_add_kernels "${PATH_PROJECT}"
 
 jupyter kernelspec list
