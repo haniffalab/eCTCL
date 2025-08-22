@@ -62,7 +62,7 @@ logger_info "Project: '$(secret_path ${PATH_PROJECT})'" 0
 
 bash ${HOME}/code/project_create.sh "${PATH_PROJECT}" "${PATH_SCRATCH}"
 
-shopt -s nocasematch`
+shopt -s nocasematch
 if [[ -n "${PDEBUG}" ]]; then
   logger_debug "Debug mode enabled, skipping workflow execution" 0
   return 0

@@ -18,7 +18,7 @@ function setup_env_fetch_src () {
     export PATH_SOFTWARE="/software/cellgen/$(id -gn)/${USER}"
   else
     logger_info "Using local software directory" 0 >&2
-    mkdir ${HOME}/software
+    mkdir "${HOME}/software"
     # export TEMP="$(echo "${1}" | sed 's/.*group/group/g')"
     export PATH_SOFTWARE="${HOME}/software"
   fi
@@ -49,7 +49,7 @@ function setup_env_fetch_repos () {
         # logger_info "Found repository in '${REPO_PATH_}'" 0
         REPO_PATHS+=("${REPO_PATH_}")
       fi
-    done < <("${PATH_FIND[@]}")
+    done < <(printf '%s\n' "${PATH_FIND[@]}")
     # Picking the repository path with the most recent modification
     if [[ ${#REPO_PATHS[@]} -eq 0 ]]; then
       REPO_PATH="${PATH_SOURCE}/${REPO_NAME}"
@@ -75,25 +75,25 @@ function setup_env_fetch_repos () {
     REPO_PATH="$(realpath ${REPO_PATH})"
     # Linking environment files to the envs directory
     ENV_REMOTE="${REPO_PATH}/envs/${ENV_NAME}.yaml"
-    ENV_LOCALY="${1}/envs/${ENV_NAME}.yaml"
-    if [[ ! -f "${ENV_REMOTE}" ]] && [[ ! -f "${ENV_LOCALY}" ]]; then
+    ENV_LOCALLY="${1}/envs/${ENV_NAME}.yaml"
+    if [[ ! -f "${ENV_REMOTE}" ]] && [[ ! -f "${ENV_LOCALLY}" ]]; then
       logger_warn "No environment file, will pip install instead" 0
-      echo "# pip install -e ${REPO_PATH} --quiet" > "${ENV_LOCALY}"
-      echo "name: ${ENV_NAME}" >> "${ENV_LOCALY}"
-      echo "channels:" >> "${ENV_LOCALY}"
-      echo "  - conda-forge" >> "${ENV_LOCALY}"
-      echo "dependencies:" >> "${ENV_LOCALY}"
-      echo "  - python" >> "${ENV_LOCALY}"
-      echo "  - pip" >> "${ENV_LOCALY}"
-      # echo "    pip:" >> "${ENV_LOCALY}"
+      echo "# pip install -e ${REPO_PATH} --quiet" > "${ENV_LOCALLY}"
+      echo "name: ${ENV_NAME}" >> "${ENV_LOCALLY}"
+      echo "channels:" >> "${ENV_LOCALLY}"
+      echo "  - conda-forge" >> "${ENV_LOCALLY}"
+      echo "dependencies:" >> "${ENV_LOCALLY}"
+      echo "  - python" >> "${ENV_LOCALLY}"
+      echo "  - pip" >> "${ENV_LOCALLY}"
+      # echo "    pip:" >> "${ENV_LOCALLY}"
       # TEMP="$(
       #   echo "${GIT_REPOS_REF[${ENV_NAME}]}" | sed 's|^git|git+https://| s|:|/|'
       # )@main"
-      # echo "      - ${TEMP}" >> "${ENV_LOCALY}"
+      # echo "      - ${TEMP}" >> "${ENV_LOCALLY}"
     fi
     # if file is not linked nor exists, link it
-    if [[ ! -f "${ENV_LOCALY}" ]]; then
-      ln -s "${ENV_REMOTE}" "${ENV_LOCALY}"
+    if [[ ! -f "${ENV_LOCALLY}" ]]; then
+      ln -s "${ENV_REMOTE}" "${ENV_LOCALLY}"
     fi
   done
 }
