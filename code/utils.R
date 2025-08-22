@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------------------
 # created: 2024-12-06 Fri 15:25:00 GMT
-# updated: 2024-12-06
+# updated: 2025-07-17
 # version: 0.0.9
 # status: Prototype
 #
@@ -12,6 +12,18 @@
 #     affiliation: The Wellcome Sanger Institute
 #     email: cs59@sanger.ac.uk, cramsuig@gmail.com
 # ------------------------------------------------------------------------------
+
+packages <- c(
+  "optparse",
+  "logging",
+  "eulerr",
+  "UpSetR"
+)
+for (pkg in packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg, repos = "https://cloud.r-project.org")
+  }
+}
 
 # Finding unique substrings in a list of strings
 find_substring <- function(x) {
