@@ -1,6 +1,6 @@
 #!/usr/bin/env R
 
-parse_args <- function() {
+parse_args_ <- function() {
   option_list <- list(
     optparse::make_option(c("-i", "--input"),
       type = "character",
@@ -34,16 +34,23 @@ panel_expression_comparison <- function(args, ...) {
 
   ## Variables ## --------------------------------------------------------------
   args <- c(args, list(...))
-  input_files <- list.files(
-    path = args$input, pattern = "annotated.csv", full.names = TRUE
-  )
+  input_files <- args$input
+  if (!file.exists(args$input)) {
+    input_files <- list.files(
+      path = args$input, pattern = "annotated.csv", full.names = TRUE
+    )
+  }
   output_name  <- tools::file_path_sans_ext(basename(args$input))
   output_path <- if (is.null(args$output)) dirname(args$input) else args$output
   output_path <- file.path(output_path, output_name, "plots")
 
+  logger_whos <- sapply(X = ls(), FUN = function(x) class(get(x)) )
+  logger_whos <- logger_whos %in% c("list", "character")
+  logger_whos <- ls()[logger_whos & !grepl("logger_whos|_df|opt", ls())]
+  str(sapply(logger_whos, function(x) get(x)), max.level = 2)
+
   ## Loading data ## -----------------------------------------------------------
-  browser()
-  temp <- paste(input_files, collapse = "\n ")
+  temp <- paste(" ", paste(input_files, collapse = "\n "))
   logging::loginfo(glue("Loading data from:\n {temp}"))
   start <- Sys.time()
   emdata_df <- readr::read_csv(input_files) %>% dplyr::bind_rows()
@@ -54,11 +61,11 @@ panel_expression_comparison <- function(args, ...) {
   genes_v <- which(grepl("conf_score", colnames(emdata_df)))
   # Calculate mean expression per condition for each gene
   emdata_pivot_df <- emdata_df %>%
-    dplyr::group_by(condition) %>%
-    dplyr::summarise(across(
+    dplyr::group_by(file_id) %>%
+    dplyr::summarise(dplyr::across(
       .cols = colnames(emdata_df)[(genes_v + 1):ncol(emdata_df)],
       .fns = list(mean = ~ mean(.x, na.rm = TRUE)),
-      .names = "{col}_mean"
+      .names = "{.col}_{.fn}"
     )) %>%
     tidyr::pivot_longer(
       cols = colnames(emdata_df)[(genes_v + 1):ncol(emdata_df)],
@@ -94,7 +101,7 @@ plot_boxes <- function(data, group_var, x_var = "genes", y_var = "mean") {
 if (identical(environment(), globalenv()) && !interactive()) {
   source_require(c("code/logger.R", "code/utils.R"))
 
-  args <- parse_args()
+  args <- parse_args_()
 
   logging::loginfo("Starting function_name.")
   panel_expression_comparison(args)
