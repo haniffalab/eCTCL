@@ -22,10 +22,7 @@
 
 ## Environment setup ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 # Quick installations --------------------------------------
-if (!requireNamespace("optparse", quietly = TRUE))
-  install.packages("optparse", repos = "https://cloud.r-project.org")
-if (!requireNamespace("logging", quietly = TRUE))
-  install.packages("logging", repos = "https://cloud.r-project.org")
+source("code/utils.R")
 # Basic packages -------------------------------------------
 # Logging configuration ------------------------------------
 logging::basicConfig()
@@ -50,6 +47,11 @@ plot_heatmap <- function(x_matrix) {
     ) %>%
     ggplot2::ggplot(mapping = ggplot2::aes(x = QUERY, y = COMPARE)) +
     ggplot2::geom_tile(mapping = ggplot2::aes(fill = value)) +
+    ggplot2::geom_text(
+      mapping = ggplot2::aes(label = gsub("^0", "", round(value, 2))),
+      color = "black", size = 3,
+      position = ggplot2::position_nudge(y = 0.25)
+    ) +
     ggplot2::geom_text(mapping = ggplot2::aes(label = gsub("^0", "", round(value, 2)))) +
     ggplot2::scale_fill_gradient(low = "white", high = "red") +
     ggplot2::theme_minimal() +
@@ -107,12 +109,12 @@ str(sapply(temp, function(x) get(x)))
 `%>%` <- dplyr::`%>%`
 metrics_files <- inputs_file %>%
   list.dirs(recursive = FALSE) %>%
-  stringr::str_subset("0032785|FFPE") %>%
+  # stringr::str_subset("0032785|FFPE") %>%
   list.files(pattern = "metrics_summary.csv", full.names = TRUE)
 
 panel_files <- inputs_file %>%
   list.dirs(recursive = FALSE) %>%
-  stringr::str_subset("0032785|FFPE") %>%
+  # stringr::str_subset("0032785|FFPE") %>%
   list.files(pattern = "gene_panel.json", full.names = TRUE)
 
 # reading json files
@@ -200,13 +202,16 @@ outputs_list <- outputs_list[!grepl("testplot", names(outputs_list))]
 temp <- length(outputs_list)
 logging::loginfo(glue("Saving {temp} files"))
 pflag <- " \033[1;32m√\033[0m"
+ftype <- "unknown"
 for (name_i in names(outputs_list)) {
   item <- outputs_list[[name_i]]
-  if (is.null(class(item))) next
   fname <- file.path(output_resu, glue("{name_i}"))
-  ftype <- paste0(class(item), collapse = "/")
-  cat(glue("Storing {ftype}\n{fname}"))
   eflag <- " \033[1;31mX\033[0m"
+  if (is.null(class(item))) next
+  if (ftype != paste0(class(item), collapse = "/")) {
+    ftype <- paste0(class(item), collapse = "/")
+  }
+  cat(glue("Storing {ftype}\n{fname}"))
   # create directory if it does not exist
   if (!dir.exists(dirname(fname))) {
     dir.create(dirname(fname), recursive = TRUE)
