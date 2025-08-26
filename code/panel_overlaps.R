@@ -6,7 +6,7 @@
 #           cell types they target.
 #
 # created: 2025-02-04 Tue 08:53:59 GMT
-# updated: 2025-06-09
+# updated: 2025-08-18
 # version: 0.0.9
 # status: Prototype
 #
@@ -17,7 +17,7 @@
 #     email: cs59@sanger.ac.uk, cramsuig@gmail.com
 # ------------------------------------------------------------------------------
 # Exectute:
-# FNAME=code/comparison_overlaps_panel.R; chmod +x ${FNAME}; mkdir -p .logs;
+# FNAME=code/panel_overlaps.R; chmod +x ${FNAME}; mkdir -p .logs;
 # LNAME=$(echo "${FNAME/%.*/}" | sed 's|'"$(dirname ${PWD})/"'||' | tr '/' '.')
 # Rscript ${FNAME} 2>&1 | tee -a .logs/${FNAME/\//.}_$(date +%Y%m%d%-H%M%S)
 
@@ -26,10 +26,9 @@
 ################################################################################
 
 # Quick installations --------------------------------------
+source("code/utils.R")
 # Basic packages -------------------------------------------
 # Logging configuration ------------------------------------
-if (!requireNamespace("logging", quietly = TRUE))
-  install.packages("logging", repos = "https://cloud.r-project.org")
 red <- yellow <- cyan <- c
 if (requireNamespace("crayon", quietly = TRUE)) {
   red <- crayon::red
@@ -57,22 +56,19 @@ logger("Global configuration") #################################################
 
 glue <- stringr::str_glue
 indata_name <- "panels-10x"
-action_name <- "comparisons_overlapping"
+action_name <- "overlaps"
 result_name <- sprintf(
-  "%s_%s_%s", indata_name, action_name, format(Sys.time(), "%Y%m%d-%H%M%S")
+  "%s_%s_%s", indata_name, action_name, format(Sys.time(), "%Y%m%d")
 )
 
 inputs_path <- "./data"
 extent_strn <- "csv"
-inputs_file <- file.path(
-  inputs_path, "xenium-panels", glue("{indata_name}.{extent_strn}")
-)
+inputs_fold <- file.path(inputs_path, "xenium-panels")
 
 output_resu <- file.path("./results", glue("{result_name}"))
 output_figs <- file.path("./results", glue("{result_name}"))
-output_name <- gsub(glue(".{extent_strn}"), "", basename(inputs_file))
 output_file <- file.path(
-  inputs_path, "processed", glue("{output_name}_{action_name}.{extent_strn}")
+  inputs_path, "processed", glue("{indata_name}_{action_name}.{extent_strn}")
 )
 
 outputs_list <- list()
@@ -85,39 +81,10 @@ str(sapply(temp, function(x) get(x)))
 logger("Loading data") #########################################################
 ################################################################################
 
-logging::loginfo("Downloading data.")
-if (!dir.exists(dirname(inputs_file))) {
-  dir.create(dirname(inputs_file), recursive = TRUE)
-}
-pfix <- "https://cdn.10xgenomics.com/raw/upload/v"
-sfix <- "software-support/Xenium-panels/"
-inputs_urls <- c(
-  glue(
-    "{pfix}1699308550/{sfix}hSkin_panel_files/Xenium_hSkin_v1_metadata.csv"
-  ),
-  paste0(
-    glue("{pfix}1706911412/{sfix}"),
-    "hImmuno_Oncology_panel_files/Xenium_hIO_v1_metadata.csv"
-  ),
-  paste0(
-    glue("{pfix}1715726653/{sfix}/"),
-    "5K_panel_files/XeniumPrimeHuman5Kpan_tissue_pathways_metadata.csv"
-  )
-)
-
-for (i in seq_along(inputs_urls)) {
-  file_name <- file.path(inputs_path, "xenium-panels", basename(inputs_urls[i]))
-  if (file.exists(file_name)) {
-    logging::loginfo(glue("File {file_name} already exists."))
-    next
-  }
-  logging::loginfo(glue("Downloading {file_name}."))
-  download.file(inputs_urls[i], file_name, mode = "wb")
-}
-
 logging::loginfo("Loading data.")
-panels_df <- lapply(inputs_urls, readr::read_csv)
-names(panels_df) <- gsub("_metadata|.csv", "", basename(inputs_urls))
+inputs_files <- list.files(inputs_fold, pattern = "*.csv", full.names = TRUE)
+panels_df <- lapply(inputs_files, readr::read_csv)
+names(panels_df) <- gsub("_metadata|.csv", "", basename(inputs_files))
 
 ################################################################################
 logger("Pre-processing") #######################################################
@@ -143,7 +110,7 @@ res_overlap <- overlap_list(panels_list, v = TRUE)
 str(res_overlap)
 
 smax <- max(sapply(res_overlap, length))
-outputs_list[["overlaps"]] <- sapply(
+outputs_list[["overlaps_table"]] <- sapply(
   X = res_overlap,
   FUN = function(x) {
     y <- x[1:smax]
@@ -155,6 +122,66 @@ outputs_list[["overlaps"]] <- sapply(
 ################################################################################
 logger("Post-processing") ######################################################
 ################################################################################
+
+# logger("Barplots per panel", 60, cyan)
+# column_annotation_0 <- c("Annotation", "cell_type")
+# for (panel_i in names(panels_list)) {
+#   fname <- glue("barplot_annotation_{panel_i}")
+#   # plotting number of genes per annotation
+#   column_annotation <- column_annotation_0[
+#     column_annotation_0 %in% colnames(panels_df[[panel_i]])
+#   ]
+#   outputs_list[[fname]] <- ggplot2::ggplot(
+#     data = panels_list[[panel_i]],
+#     mapping = ggplot2::aes(x = .data[[column_annotation]])
+#   ) + geom_bar(stat="bin") +
+#       theme_minimal()
+# }
+
+logger("Generating Venn Diagram (ggvenn)", 60, cyan)
+color_palette <- RColorBrewer::brewer.pal(
+  name = "Set3", n = length(panels_list)
+)
+outputs_list[["overlaps_ggvenn"]] <- ggvenn::ggvenn(
+  data = panels_list,
+  fill_color = color_palette,
+  stroke_size = 0.5, set_name_size = 5,
+  show_percentage = TRUE
+) +
+  ggplot2::theme_void() +
+  ggplot2::labs(title = "Overlapping genes in Xenium panels")
+
+logger("Generating Euler diagram (eulerr)", 60, cyan)
+p <- eulerr::euler(panels_list)
+fname <- file.path(output_resu, glue("overlaps_euler.pdf"))
+# create directory if it does not exist
+if (!dir.exists(dirname(fname))) {
+  dir.create(dirname(fname), recursive = TRUE)
+}
+pdf(fname);
+plot(
+  p, counts = TRUE, font=1, cex=1, alpha=0.5,
+  fill = color_palette,
+  # quantities = TRUE,
+  labels = list(size = 10, alpha = 0.5),
+  quantities = list(size = 10),
+  main = "Overlapping genes in Xenium panels"
+)
+graphics.off()
+
+logger("Generating UpSet plot (UpSetR)", 60, cyan)
+p <- UpSetR::upset(
+  UpSetR::fromList(panels_list),
+  sets = names(panels_list),
+  order.by = "freq",
+  main.bar.color = "black",
+  sets.bar.color = color_palette,
+  point.size = 3.5
+)
+fname <- file.path(output_resu, glue("overlaps_upset.pdf"))
+pdf(fname);
+print(p)
+graphics.off()
 
 intersect_all_previous <- c(
   "CCL19", "CCND1", "CCR7", "CD3E", "CD68", "CD79A", "CD83", "CD8A", "CDK1",
@@ -188,9 +215,37 @@ logging::loginfo(glue("Missing in previous overlap: {temp}"))
 logger("Saving") ###############################################################
 ################################################################################
 
-output_file <- glue("{output_resu}/overlaps.csv")
-logging::loginfo(glue("Saving results to:\n{output_file}"))
-if (!dir.exists(output_resu)) {
-  dir.create(output_resu, recursive = TRUE)
+temp <- length(outputs_list)
+logging::loginfo(glue("Saving {temp} files"))
+pflag <- " \033[1;32m√\033[0m"
+ftype <- "unknown"
+for (name_i in names(outputs_list)) {
+  item <- outputs_list[[name_i]]
+  fname <- file.path(output_resu, glue("{name_i}"))
+  eflag <- " \033[1;31mX\033[0m"
+  if (is.null(class(item))) next
+  if (ftype != paste0(class(item), collapse = "/")) {
+    ftype <- paste0(class(item), collapse = "/")
+  }
+  cat(glue("Storing {ftype}\n{fname}"))
+  # create directory if it does not exist
+  if (!dir.exists(dirname(fname))) {
+    dir.create(dirname(fname), recursive = TRUE)
+  }
+  # add extension and save based on class() # ----------------
+  if (any(class(item) %in% c("gg", "ggplot", "spec_tbl_df"))) {
+    suppressMessages(ggplot2::ggsave(
+      filename = paste0(fname, ".pdf"),
+      plot = outputs_list[[name_i]],
+      width = 10, height = 10
+    ))
+    eflag <- pflag
+  } else if (any(class(item) %in% c("data.frame"))) {
+    readr::write_csv(outputs_list[[name_i]], paste0(fname, ".csv"))
+    eflag <- pflag
+  } else if (any(class(item) %in% c("list"))) {
+    eflag <- pflag
+    saveRDS(outputs_list[[name_i]], paste0(fname, ".rds"))
+  }
+  print(glue("{eflag}"))
 }
-readr::write_csv(x = outputs_list[["overlaps"]], file = output_file)
