@@ -2,9 +2,11 @@
 
 # ------------------------------------------------------------------------------
 # title: Summarise and visualise aggregated Ranger metrics.
+#.       This one is done from the perspective of the Xenium Onboard
+#.       Analysis (XOA) pipeline outputs.
 #
 # created: 2024-12-06 Fri 10:17:38 GMT
-# updated: 2025-01-15
+# updated: 2025-08-26
 # version: 0.0.9
 # status: Prototype
 # project: Cutaneous T-cell Lymphoma (CTCL)
@@ -52,7 +54,6 @@ plot_heatmap <- function(x_matrix) {
       color = "black", size = 3,
       position = ggplot2::position_nudge(y = 0.25)
     ) +
-    ggplot2::geom_text(mapping = ggplot2::aes(label = gsub("^0", "", round(value, 2)))) +
     ggplot2::scale_fill_gradient(low = "white", high = "red") +
     ggplot2::theme_minimal() +
     ggplot2::theme(
