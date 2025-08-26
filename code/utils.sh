@@ -106,19 +106,17 @@ function file_log () {
 }
 
 function import () {
-  local FILENAME="$1"
-  if [[ -n "${@:2}" ]]; then
-    source "${FILENAME}"
-    return 0
+  if [[ $# -eq 0 ]]; then
+    echo "Usage: import <filename> <function1> [function2 ...]" >&2
+    return 1
   fi
+  local FILENAME="$1"
+  if [[ -z "${@:2}" ]]; then source "${FILENAME}"; return 0; fi
   for ARG in "${@:2}"; do
     local TEMP="$(mktemp).sh"
     local FUNC_NAME="${ARG}"
     awk "/$FUNC_NAME[[:space:]]*\\(\\)/ {f=1} f {print} /^}/ && f {exit}" "$FILENAME" > "${TEMP}"
-    if [[ ! -s "${TEMP}" ]]; then
-      echo "Function '${FUNC_NAME}' not found in '${FILENAME}'" >&2
-      return 1
-    fi
+    if [[ ! -s "${TEMP}" ]]; then echo "not found" >&2; return 1; fi
     eval "$(<"${TEMP}")"
   done
 }
