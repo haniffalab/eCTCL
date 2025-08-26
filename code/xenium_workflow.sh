@@ -10,7 +10,7 @@
 #
 # maintainer: Ciro Ramírez-Suástegui
 # author:
-#   - name: Ciro Ramírez-Suástegu
+#   - name: Ciro Ramírez-Suástegui
 #     affiliation: The Wellcome Sanger Institute
 #     email: cs59@sanger.ac.uk, cramsuig@gmail.com
 # ------------------------------------------------------------------------------
@@ -144,6 +144,7 @@ else
   echo -e "${OUTPUTS_PATH}"
 fi
 
+# This will be hardcoded for now, as we want to compare two specific datasets
 TEMP="${PATH_PROJECT}/eCTCL/data/raw/xenium_CTCL_hImmune-v1,\
 ${PATH_PROJECT}/../PCNSL/data/raw/xenium_BRA"
 
@@ -266,7 +267,7 @@ for QDATA in ${QDATAS[@]}; do
     logger_info "Skipping, already processed: ${OUT_FNAME}" 0
     continue
   fi
-  logger_info "Processing $(basename ${QDATA%.*})...¡" 40 "@"
+  logger_info "Processing $(basename ${QDATA%.*})...!" 40 "@"
   LNAME=".logs/${DATASET_NAME}/${LNAME0}_$(basename ${QDATA%.*})"
   bsub -G ${LSB_DEFAULTGROUP} \
         -o ${LNAME}_$(date '+%Y%m%d').out \
