@@ -1,0 +1,130 @@
+output_dir: results/xenium_CTCL_scAtlasTb
+images: results/xenium_CTCL_scAtlasTb
+
+os: intel
+use_gpu: true
+
+defaults:
+  # module configuration
+  preprocessing:
+    raw_counts: X
+    normalize:
+      target_sum: 100
+    highly_variable_genes:
+      n_top_genes: 2000
+    scale: true
+    pca:
+      n_comps: 379
+    neighbors:
+      n_neighbors: 16
+    umap:
+      neighbors_key: neighbors
+    assemble:
+      - normalize
+      - highly_variable_genes
+      - pca
+      - neighbors
+      - umap
+    colors:
+      - file_id
+      - log1p_total_counts
+  
+  clustering:
+    algorithm: louvain
+    resolutions:
+      - 0.1
+      - 0.4
+      - 0.8
+
+  integration:
+    raw_counts: layers/counts
+    norm_counts: layers/normcounts
+    batch: file_id
+    methods:
+      unintegrated:
+      harmonypy:
+        key: file_id
+        n_comps:
+          - 10
+      scvi:
+        n_hidden: 128
+
+  metrics:
+    unintegrated: layers/normcounts
+    raw_counts: layers/counts
+    corrected: X
+    label:
+      - louvain_0.1_1
+    batch:
+      - file_id
+    metrics:
+      - nmi
+      - ari
+      - asw_label
+      - asw_batch
+      - cell_cycle
+      - clisi
+      - ilisi
+      - graph_connectivity
+      # - isolated_label_asw
+      - isolated_label_f1
+      # - pcr_comparison
+      # - kbet_pg
+
+output_map:
+  preprocessing: results/xenium_CTCL_scAtlasTb/preprocessing/dataset~{dataset}/file_id~{file_id}/preprocessed.zarr
+
+DATASETS:
+  hImmune: # custom task/workflow name
+    # input specification: map of module name to map of input file name to input file path
+    input:
+      merge:
+        AX10-SKI-0-FFPE-1-S6: data/processed/xenium_CTCL_hImmune-v1/AX10-SKI-0-FFPE-1-S6_qc.zarr
+        AX11-SKI-0-FFPE-1-S7: data/processed/xenium_CTCL_hImmune-v1/AX11-SKI-0-FFPE-1-S7_qc.zarr
+        AX12-AX8-SKI-0-FFPE-1-S11-17: data/processed/xenium_CTCL_hImmune-v1/AX12-AX8-SKI-0-FFPE-1-S11-17_qc.zarr
+        AX5-SKI-0-FFPE-1-S10: data/processed/xenium_CTCL_hImmune-v1/AX5-SKI-0-FFPE-1-S10_qc.zarr
+        AX6-SKI-0-FFPE-1-S10: data/processed/xenium_CTCL_hImmune-v1/AX6-SKI-0-FFPE-1-S10_qc.zarr
+        AX8-SKI-0-FFPE-1-S16: data/processed/xenium_CTCL_hImmune-v1/AX8-SKI-0-FFPE-1-S16_qc.zarr
+        AX9-SKI-0-FFPE-1-S9: data/processed/xenium_CTCL_hImmune-v1/AX9-SKI-0-FFPE-1-S9_qc.zarr
+        P677A-S5: data/processed/xenium_CTCL_hImmune-v1/P677A-S5_qc.zarr
+      preprocessing: merge
+      integration: preprocessing
+      metrics: integration
+  
+  hSkin:
+    input:
+      merge:
+        1996__AX5-SKI-0-FFPE-1-s9: data/processed/xenium_CTCL_hSkin-v1/1996__AX5-SKI-0-FFPE-1-s9_qc.zarr
+        1996__AX6-SKI-0-FFPE-1-s9: data/processed/xenium_CTCL_hSkin-v1/1996__AX6-SKI-0-FFPE-1-s9_qc.zarr
+        1996__AX7-SKI-0-FFPE-1-s9: data/processed/xenium_CTCL_hSkin-v1/1996__AX7-SKI-0-FFPE-1-s9_qc.zarr
+        1996__AX8-SKI-0-FFPE-1-s15: data/processed/xenium_CTCL_hSkin-v1/1996__AX8-SKI-0-FFPE-1-s15_qc.zarr
+        1996__AX9-SKI-0-FFPE-1-s8: data/processed/xenium_CTCL_hSkin-v1/1996__AX9-SKI-0-FFPE-1-s8_qc.zarr
+        2159__AX10-SKI-0-FFPE-1-s5: data/processed/xenium_CTCL_hSkin-v1/2159__AX10-SKI-0-FFPE-1-s5_qc.zarr
+        2159__AX11-SKI-0-FFPE-1-s6: data/processed/xenium_CTCL_hSkin-v1/2159__AX11-SKI-0-FFPE-1-s6_qc.zarr
+        2159__AX12-SKI-0-FFPE-1-s10: data/processed/xenium_CTCL_hSkin-v1/2159__AX12-SKI-0-FFPE-1-s10_qc.zarr
+        2159__p677a-S4: data/processed/xenium_CTCL_hSkin-v1/2159__p677a-S4_qc.zarr
+      preprocessing: merge
+      integration: preprocessing
+      metrics: integration
+
+  hAtlas:
+    input:
+      merge:
+        57__AX10-SKI-0-FFPE-1-S7: data/processed/xenium_CTCL_hAtlas-v1.1/57__AX10-SKI-0-FFPE-1-S7_qc.zarr
+        57__AX21-SKI-0-FFPE-1-S7: data/processed/xenium_CTCL_hAtlas-v1.1/57__AX21-SKI-0-FFPE-1-S7_qc.zarr
+        73__AX8-SKI-0-FFPE-1-S18: data/processed/xenium_CTCL_hAtlas-v1.1/73__AX8-SKI-0-FFPE-1-S18_qc.zarr
+        57__AX11-SKI-0-FFPE-1-S8: data/processed/xenium_CTCL_hAtlas-v1.1/57__AX11-SKI-0-FFPE-1-S8_qc.zarr
+        57__AX21-SKI-0-FFPE-1-S8: data/processed/xenium_CTCL_hAtlas-v1.1/57__AX21-SKI-0-FFPE-1-S8_qc.zarr
+        73__AX9-SKI-0-FFPE-1-S10: data/processed/xenium_CTCL_hAtlas-v1.1/73__AX9-SKI-0-FFPE-1-S10_qc.zarr
+      preprocessing: merge
+      integration: preprocessing
+      metrics: integration 
+    
+    preprocessing:
+      normalize:
+        target_sum: 1000
+      highly_variable_genes:
+        n_top_genes: 2000
+      scale: true
+      pca:
+        n_comps: 379
