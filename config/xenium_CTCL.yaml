@@ -48,8 +48,6 @@ defaults:
           - 10
       scvi:
         n_hidden: 128
-      # scgen:
-      #   n_epochs: 10
 
   metrics:
     unintegrated: layers/normcounts
