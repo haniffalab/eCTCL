@@ -1,0 +1,7 @@
+# pip install
+name: sccello
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - pip

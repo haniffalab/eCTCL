@@ -19,7 +19,7 @@
 # LNAME=$(echo "${FNAME/%.*/}" | sed 's|'"$(dirname ${PWD})/"'||' | tr '/' '.')
 # bash ${FNAME} 2>&1 | tee -a .logs/${LNAME}_$(date +%Y%m%d%H%M%S)
 # Interactively:
-# export P1="hAtlas"; export PDEBUG="debug"; source code/xenium_workflow.sh
+# export P1="b1_hAtlas"; export PDEBUG="debug"; source code/xenium_workflow.sh
 # eval "$(sed -n '/PATTERN_BEGIN/,/PATTERN_END/p' code/xenium_workflow.sh)"
 
 printf '\n%s\n' '
@@ -39,7 +39,7 @@ printf '\n%s\n' '
 
 ################################################################################
 ## Environment setup ###########################################################
-################################################################################
+#region ########################################################################
 
 ## run-time parameters -------------------------------------
 # -e error, -u unset variables as error, -o pipefail error
@@ -74,46 +74,64 @@ done
 
 ################################################################################
 ## Global configuration ########################################################
-################################################################################
+#region ########################################################################
 
 PATH_PROJECT="$(path_project)"
 
 # Selecting subset of the dataset
 case "${P1}" in
-  # exclude skin and 5K panel -> take immuno-oncology samples
-  "hImmune") DATASET_SUB="hImmune-v1"; EXCLUDE="20240815|20250227"; RMEM=(5000 6000);;
-  # exclude immuno-oncology, 5K panel -> take skin samples
-  "hSkin") DATASET_SUB="hSkin-v1"; EXCLUDE="20241115|20250227"; RMEM=(5000 15000);;
-  # exclude skin and immuno-oncology -> take 5K samples
-  "hAtlas") DATASET_SUB="hAtlas-v1.1"; EXCLUDE="20240815|20241115"; RMEM=(25000 40000);;
+  # exclude skin and 5K panel -> take immuno-oncology samples - EXCLUDE="20240815|20250227";
+  "b0_hImmune") DATASET_SUB="b0_hImmune"; RMEM=(5000 6000);;
+  # exclude immuno-oncology, 5K panel -> take skin samples - EXCLUDE="20241115|20250227";
+  "b0_hSkin") DATASET_SUB="b0_hSkin"; RMEM=(5000 15000);;
+  # exclude skin and immuno-oncology -> take 5K samples - EXCLUDE="20240815|20241115";
+  "b0_hAtlas") DATASET_SUB="b0_hAtlas"; RMEM=(25000 40000);;
+  "b1_hAtlas") DATASET_SUB="b1_hAtlas"; RMEM=(25000 40000);;
 esac
 
 PATH_RAW="${PATH_PROJECT}/data/raw"
 PATH_PRC="${PATH_PROJECT}/data/processed"
 
 function setup_subset () {
-  export DATASET_NAME="xenium_CTCL_${DATASET_SUB}"
+  export NAME_DATASET="sp_ctcl_${DATASET_SUB}"
+  export PATH_DATASET="sp_ctcl/${DATASET_SUB}"
   export PATH_RESULTS="${PATH_PROJECT}/$(
-    secret_vars output_dir "${PATH_PROJECT}/config/${DATASET_NAME}.yaml"
+    secret_vars output_dir "${PATH_PROJECT}/config/sp_defaults.yaml"
   )"
   export ANNBENCH="$(realpath ${PATH_PROJECT}/../sc2sp_benchmark)"
   export REF_DATA="${PATH_PRC}/ruoyan_2024_suspension.h5ad"
   export REF_LABELS="cell_type"
-  export INPUT_FEATURES="$(ls ${PATH_RAW}/${DATASET_NAME}/*/gene_panel.json | head -n1)"
+  export INPUT_FEATURES="$(find ${PATH_RAW}/${PATH_DATASET} -name "gene_panel.json" | head -n1)"
   export PANEL_NAME=$(
     grep -m1 "design_id" ${INPUT_FEATURES} |
     awk '{gsub(/,|"/,""); print $2}' | sed 's/_/-/g'
   )
-  export QDATAS=($(ls -d ${PATH_PRC}/${DATASET_NAME}/*))
   RID="$(basename ${REF_DATA%.*})/${REF_LABELS}"
-  REF_PKL="./results/${DATASET_NAME}~celltypist~${RID}/reference.pkl"
+  REF_PKL="./results/${NAME_DATASET}~celltypist~${RID}/reference.pkl"
 }
 
-mkdir -p ".logs/${DATASET_NAME}"
+function job_gpu () {
+  bsub -G ${LSB_DEFAULTGROUP} \
+    -Is -n${1-1} -q gpu-normal `# interactive, cores, queue` \
+    -gpu "num=${1-1}:gmem=${2-25G}:mode=shared" \
+    -R "select[mem>${2-25G}] rusage[mem=${2-25G}]" -M${2-25G} \
+    -a "memlimit=True" -W7:00 -J ${STY} \
+    "$@"
+}
 
-################################################################################
-logger_info "Running workflow for '${DATASET_NAME}'" ###########################
-################################################################################
+function job_cpu () {
+  bsub -G ${LSB_DEFAULTGROUP} \
+    -Is -n${1-1} -q normal `# interactive, cores, queue` \
+    -R "select[mem>${2}] rusage[mem=${2}]" -M${2} \
+    -a "memlimit=True" -W7:30 -J ${STY} \
+    "$@"
+}
+
+mkdir -p ".logs/${NAME_DATASET}"
+
+#endregion #####################################################################
+logger_info "Running workflow for '${NAME_DATASET}'" ###########################
+#region ########################################################################
 
 logger_info "Working at: '$(secret_path ${PWD})'" 0
 logger_info "Project: '$(secret_path ${PATH_PROJECT})'" 0
@@ -126,23 +144,27 @@ if [[ -n "${PDEBUG}" ]]; then
 fi
 shopt -u nocasematch
 
-################################################################################
+#endregion #####################################################################
 logger_info "Space Ranger summary" #############################################
-################################################################################
+#region ########################################################################
 
 ${PKG_MAN} activate "env_r"
 
+NAME_SUPERSET=sp_ctcl
 OUTPUTS_PATH=$(
-  ls -d ${PATH_PROJECT}/results/${DATASET_NAME/_h*/}_metrics-summary* | head -n1
+  ls -d ${PATH_PROJECT}/results/${NAME_SUPERSET}_metrics-summary* | head -n1
 ) > /dev/null 2>&1 || echo ""
 if [[ ! -d "${OUTPUTS_PATH}" ]]; then
-  logger_info "Running Space Ranger summary: '${DATASET_NAME}'" 0
-  Rscript ${PATH_PROJECT}/code/spaceranger_summary.R --name="${DATASET_NAME}" \
-    --input="${PATH_RAW}/${DATASET_NAME}"
+  logger_info "Running Space Ranger summary: '${NAME_SUPERSET}'" 0
+  Rscript ${PATH_PROJECT}/code/ranger_summary.R --name="${NAME_SUPERSET}" \
+    --input="${PATH_RAW}/sp_ctcl"
 else
   logger_info "Skipping Space Ranger summary, already done at:" 0
   echo -e "${OUTPUTS_PATH}"
 fi
+
+Rscript ${PATH_PROJECT}/code/ranger_summary.R --name="sp_ctcl_hAtlas" \
+    --input="${PATH_RAW}/sp_ctcl" --include="hAtlas"
 
 # This will be hardcoded for now, as we want to compare two specific datasets
 TEMP="${PATH_PROJECT}/eCTCL/data/raw/xenium_CTCL_hImmune-v1,\
@@ -153,7 +175,7 @@ OUTPUTS_PATH=$(
 ) > /dev/null 2>&1 || echo ""
 if [[ ! -d "${OUTPUTS_PATH}" ]]; then
   logger_info "Running Space Ranger summary: 'eCTCL-PCNSL'" 0
-  Rscript ${PATH_PROJECT}/code/spaceranger_summary.R --name="eCTCL-PCNSL" \
+  Rscript ${PATH_PROJECT}/code/ranger_summary.R --name="eCTCL-PCNSL" \
     --input="${TEMP}"
 else
   logger_info "Skipping Space Ranger summary, already done at:" 0
@@ -162,23 +184,27 @@ fi
 
 ${PKG_MAN} deactivate
 
-################################################################################
+#endregion #####################################################################
 logger_info "Quality control" ##################################################
-################################################################################
+#region ########################################################################
+
+${PKG_MAN} activate "scqooc"
 
 SCQOOC="$(realpath ${PATH_PROJECT}/../scqooc)"
 FNAME="${SCQOOC}/code/bsub.sh"; chmod +x ${FNAME}
 LNAME="$(file_log ${FNAME} ${PATH_PROJECT})"
 
 bash ${FNAME} --template "${SCQOOC}/analysis/quality_control.ipynb" \
-  --run_path "${PATH_RAW}/${DATASET_NAME}" \
-  --output "${PATH_PROJECT}/analysis/${DATASET_NAME}_quality_control" \
+  --run_path "${PATH_RAW}/${PATH_DATASET}" \
+  --output "${PATH_PROJECT}/analysis/${NAME_DATASET}_quality_control" \
   --env "scqooc" --mem "${RMEM[0]}" \
-  2>&1 | tee -a .logs/${DATASET_NAME}/${LNAME}_$(date +%Y%m%d%H%M%S)
+  2>&1 | tee -a .logs/${NAME_DATASET}/${LNAME}_$(date +%Y%m%d%H%M%S)
 
-################################################################################
+${PKG_MAN} deactivate
+
+#endregion #####################################################################
 logger_info "Annotation with CellTypist" #######################################
-################################################################################
+#region ########################################################################
 
 ${PKG_MAN} activate "celltypist"
 
@@ -193,7 +219,7 @@ LNAME0="$(file_log ${FNAME} ${PATH_PROJECT})"
 
 if [[ ! -f ${REF_PKL} ]]; then
   logger_info "Training CellTypist reference" 0
-  LNAME=".logs/${DATASET_NAME}/${LNAME0}_${RID//\//.}"
+  LNAME=".logs/${NAME_DATASET}/${LNAME0}_${RID//\//.}"
   bsub -G ${LSB_DEFAULTGROUP} \
     -o ${LNAME}_$(date '+%Y%m%d').out \
     -e ${LNAME}_$(date '+%Y%m%d').err \
@@ -201,7 +227,7 @@ if [[ ! -f ${REF_PKL} ]]; then
     -R "select[mem>${RMEM[1]}] rusage[mem=${RMEM[1]}]" -M "${RMEM[1]}" \
     -W30:30 -J "$(basename ${LNAME})" \
     python ${FNAME} --input="${REF_DATA}" \
-      --output="results/${DATASET_NAME}" \
+      --output="results/${NAME_DATASET}" \
       --labels="${REF_LABELS}" \
       --features=${INPUT_FEATURES}
 else
@@ -213,13 +239,16 @@ fi
 logger_info "Mapping data to celltypist reference" 60 "-" ##
 ############################################################
 
+setup_subset
+
 FNAME="${ANNBENCH}/code/celltypist_transfer.py"; chmod +x ${FNAME}
 LNAME0="$(file_log ${FNAME} ${PATH_PROJECT})"
 
+QDATAS=($(ls -d ${PATH_PRC}/${NAME_DATASET}_qc/*))
 for QDATA in ${QDATAS[@]}; do
   QDATA_NAME="$(basename ${QDATA%.*})"
-  OUT_FNAME="$(dirname ${REF_PKL})/${QDATA_NAME}_ann.csv"
-  LNAME=".logs/${DATASET_NAME}/${LNAME0}_${RID//\//.}_${QDATA_NAME}"
+  OUT_FNAME="$(dirname ${REF_PKL})/${QDATA_NAME}.csv"
+  LNAME=".logs/${NAME_DATASET}/${LNAME0}_${RID//\//.}_${QDATA_NAME}"
   # check if job is runing (hide error or other messages by bjob)
   TEMP="$(bjobs -l | grep $(basename ${LNAME}) | wc -l)"
   if [[ ! -f ${OUT_FNAME} ]] && [[ "${TEMP}" -lt 1 ]]; then
@@ -245,30 +274,32 @@ done
 logger_info "Merge CellTypist results" 60 "-" ##############
 ############################################################
 
+setup_subset
+
 FNAME="${ANNBENCH}/code/merge.py"; chmod +x ${FNAME}
 LNAME="$(file_log ${FNAME} ${PATH_PROJECT})"
 
 python ${FNAME} --input="$(dirname ${REF_PKL/suspension.*/})" \
-  2>&1 | tee -a .logs/${DATASET_NAME}/${LNAME}_$(date +%Y%m%d%H%M%S)
+  2>&1 | tee -a .logs/${NAME_DATASET}/${LNAME}_$(date +%Y%m%d%H%M%S)
 
-################################################################################
+#endregion #####################################################################
 logger_info "Annotation with NEMO" #############################################
-################################################################################
+#region ########################################################################
 
 ${PKG_MAN} activate "nemo"
 
 FNAME="${PATH_PROJECT}/../sc2sp_benchmark/code/nemo_embed.py"; chmod +x ${FNAME}
 LNAME0="$(file_log ${FNAME} ${PATH_PROJECT})"
 
-QDATAS=($(ls -d ${PATH_PRC}/${DATASET_NAME}/*))
+QDATAS=($(ls -d ${PATH_PRC}/${NAME_DATASET}/*))
 for QDATA in ${QDATAS[@]}; do
-  OUT_FNAME="./results/${DATASET_NAME}~nemo/$(basename ${QDATA%.*})/adata.zarr"
+  OUT_FNAME="./results/${NAME_DATASET}~nemo/$(basename ${QDATA%.*})/adata.zarr"
   if [[ -d ${OUT_FNAME} ]]; then
     logger_info "Skipping, already processed: ${OUT_FNAME}" 0
     continue
   fi
   logger_info "Processing $(basename ${QDATA%.*})...!" 40 "@"
-  LNAME=".logs/${DATASET_NAME}/${LNAME0}_$(basename ${QDATA%.*})"
+  LNAME=".logs/${NAME_DATASET}/${LNAME0}_$(basename ${QDATA%.*})"
   bsub -G ${LSB_DEFAULTGROUP} \
         -o ${LNAME}_$(date '+%Y%m%d').out \
         -e ${LNAME}_$(date '+%Y%m%d').err \
@@ -281,19 +312,23 @@ done
 
 ${PKG_MAN} deactivate
 
-################################################################################
+#endregion #####################################################################
 logger_info "scAtlasTb: merge" #################################################
-################################################################################
+#region ########################################################################
 
 bash ${PATH_PROJECT}/code/scatlastb.sh merge_all \
-  "${PATH_PROJECT}/config/${DATASET_NAME}.yaml" -c1
+    "${PATH_PROJECT}/config/sp_defaults.yaml" \
+    "${PATH_PROJECT}/config/${NAME_DATASET}.yaml" \
+    --cores 1
 
 ############################################################
 logger_info "Pre-processing data" 60 "-" ###################
 ############################################################
 
 bash ${PATH_PROJECT}/code/scatlastb.sh preprocessing_all \
-  "${PATH_PROJECT}/config/${DATASET_NAME}.yaml" -c2
+  "${PATH_PROJECT}/config/sp_defaults.yaml" \
+  "${PATH_PROJECT}/config/${NAME_DATASET}.yaml" \
+  --cores 2
 
 ############################################################
 logger_info "Integration" 60 "-" ###########################
@@ -306,14 +341,15 @@ if [[ ! -L "${TEMP}.zarr" ]]; then
 fi
 
 bash ${PATH_PROJECT}/code/scatlastb.sh integration_all \
-  ${PATH_PROJECT}/config/${DATASET_NAME}.yaml -c2
+  "${PATH_PROJECT}/config/sp_defaults.yaml" \
+  "${PATH_PROJECT}/config/${NAME_DATASET}.yaml" -c2
 
-# ############################################################
-logger_info "Evaluation" 60 "-" ##############################
-# ############################################################
+############################################################
+logger_info "Evaluation" 60 "-" ############################
+############################################################
 
 # bash ${PATH_PROJECT}/code/scatlastb.sh metrics_all \
-#   ${PATH_PROJECT}/config/${DATASET_NAME}.yaml -c4
+#   ${PATH_PROJECT}/config/${NAME_DATASET}.yaml -c4
 
 ############################################################
 logger_info "Merging by linking"  60 "-" ###################
@@ -323,12 +359,30 @@ FNAME="$(realpath ${PATH_PROJECT}/src/scAtlasTb/workflow/utils/modules_merge.py)
 chmod +x ${FNAME}
 LNAME="$(file_log ${FNAME} ${PATH_PROJECT})"
 
-python ${FNAME} -p "${PATH_RESULTS}" -d "${DATASET_NAME}" |
-  tee -a .logs/${DATASET_NAME}/${LNAME}_$(date +%Y%m%d%H%M%S)
+python ${FNAME} -p "${PATH_RESULTS}" -d "${NAME_DATASET}" |
+  tee -a .logs/${NAME_DATASET}/${LNAME}_$(date +%Y%m%d%H%M%S)
 
-################################################################################
-logger_info "Merge CellTypist results with object" #############################
-################################################################################
+#endregion #####################################################################
+logger_info "Annotation report" ################################################
+#region ########################################################################
+
+############################################################
+logger_info "Creating colour files" 60 "-" #################
+############################################################
+
+${PKG_MAN} activate "scanpy"
+
+FNAME="${PATH_PROJECT}/code/colours_from-adata.py"; chmod +x ${FNAME}
+LNAME0="$(file_log ${FNAME} ${PATH_PROJECT})"
+
+python ${FNAME} --input="${REF_DATA}" --labels="cell_type" |
+  tee -a .logs/${NAME_DATASET}/${LNAME0}_$(date +%Y%m%d%H%M%S)
+
+${PKG_MAN} deactivate
+
+############################################################
+logger_info "Merge CellTypist results with object" 60 "-" ##
+############################################################
 
 ${PKG_MAN} activate "scqooc"
 
@@ -339,31 +393,20 @@ LNAME="$(file_log ${FNAME} ${PATH_PROJECT})"
 
 ADATA="${PATH_RESULTS}/${DATASET_SUB/-v*/}_merged.zarr"
 python ${FNAME} -a "${ADATA}" \
-  -l "${PATH_PROJECT}/results/${DATASET_NAME}~celltypist"*/*.csv |
-  tee -a .logs/${DATASET_NAME}/${LNAME}_$(date +%Y%m%d%H%M%S)
+  -l "${PATH_PROJECT}/results/${NAME_DATASET}~celltypist"*/*.csv \
+  --colours="data/metadata/ruoyan_2024_suspension_cell_type_colour.csv" \
+  --metadata="data/metadata/sample.csv" |
+  tee -a .logs/${NAME_DATASET}/${LNAME}_$(date +%Y%m%d%H%M%S)
 
 ${PKG_MAN} deactivate
 
-################################################################################
-logger_info "Label transfer report" ############################################
-################################################################################
-
-${PKG_MAN} activate "scqooc"
-
-setup_subset
-
-FNAME="${ANNBENCH}/code/celltypist_report.py"; chmod +x ${FNAME}
-LNAME0="$(file_log ${FNAME} ${PATH_PROJECT})"
-
-ADATA="${PATH_RESULTS}/${DATASET_SUB/-v*/}_merged_annotated.zarr"
-python ${FNAME} --input="${ADATA}" --samples="file_id" |
-  tee -a .logs/${DATASET_NAME}/${LNAME0}_$(date +%Y%m%d%H%M%S)
-
-${PKG_MAN} deactivate
-
-################################################################################
+#endregion #####################################################################
 logger_info "Panel comparisons" ################################################
-################################################################################
+#region ########################################################################
+
+############################################################
+logger_info "Fetching overlaps" 60 "-" #####################
+############################################################
 
 ${PKG_MAN} activate "env_r"
 
@@ -374,7 +417,13 @@ Rscript ${FNAME} | tee -a .logs/${LNAME}_$(date +%Y%m%d%H%M%S)
 
 ${PKG_MAN} deactivate
 
+############################################################
+logger_info "Gathering expression data" 60 "-" #############
+############################################################
+
 ${PKG_MAN} activate "scqooc"
+
+setup_subset
 
 FNAME="${PATH_PROJECT}/code/panel_expression-extract.py"; chmod +x ${FNAME}
 LNAME="$(file_log ${FNAME} ${PATH_PROJECT})"
@@ -384,19 +433,77 @@ python ${FNAME} --input="${PATH_PO}" \
   --adata="${PATH_RESULTS}/${DATASET_SUB/-v*/}_merged_annotated.zarr" \
   --exclude="probability" \
   --output="$(dirname "${PATH_PO}")" |
-  tee -a .logs/${DATASET_NAME}/${LNAME}_$(date +%Y%m%d%H%M%S)
+  tee -a .logs/${NAME_DATASET}/${LNAME}_$(date +%Y%m%d%H%M%S)
+
+
+PATH_PO="results/panels-10x_overlaps/overlaps_table.csv"
+python ${FNAME} --input="${PATH_PO}" \
+  --adata="data/processed/suspension_ruoyan_2024_ctcl.h5ad" \
+  --exclude="probability" \
+  --output="$(dirname "${PATH_PO}")" |
+  tee -a .logs/${NAME_DATASET}/${LNAME}_$(date +%Y%m%d%H%M%S)
 
 ${PKG_MAN} deactivate
+
+############################################################
+logger_info "Comparing panel expression" 60 "-" ############
+############################################################
 
 ${PKG_MAN} activate "env_r"
 
 FNAME="${PATH_PROJECT}/code/panel_expression-compare.R"; chmod +x ${FNAME}
 LNAME="$(file_log ${FNAME} ${PATH_PROJECT})"
 
-Rscript ${FNAME} --input="results/panels-10x_overlaps/hAtlas_merged_annotated.csv" |
+Rscript ${FNAME} --input="results/panels-10x_overlaps" \
+  --table="results/panels-10x_overlaps/overlaps_table.csv" \
+  --group="panel_type,sample_id,donor_id" \
+  --colors="data/metadata/ruoyan_2024_suspension_cell_type_colour.csv" |
+  tee -a .logs/${LNAME}_file_id_$(date +%Y%m%d%H%M%S)
+
+Rscript ${FNAME} --input="results/panels-10x_overlaps" \
+  --table="results/panels-10x_overlaps/overlaps_table.csv" \
+  --group="celltypist_cell_type_majority_voting" \
+  --colors="data/metadata/ruoyan_2024_suspension_cell_type_colour.csv" |
+  tee -a .logs/${LNAME}_celltypist_cell_type_majority_voting_$(date +%Y%m%d%H%M%S)
+
+############################################################
+logger_info "Comparing cell type annotations" 60 "-" #######
+############################################################
+
+FNAME="${PATH_PROJECT}/code/ann_barplot.R"; chmod +x ${FNAME}
+LNAME="$(file_log ${FNAME} ${PATH_PROJECT})"
+
+Rscript ${FNAME} --input="data/processed/suspension_ruoyan_2024_ctcl_ann.csv" \
+  --output="results/composition" \
+  --group="study_id,donor_id,donor_id" \
+  --colors="data/metadata/ruoyan_2024_suspension_cell_type_colour.csv" |
+  tee -a .logs/${LNAME}_file_id_$(date +%Y%m%d%H%M%S)
+
+Rscript ${FNAME} --input="results/panels-10x_overlaps" \
+  --output="results/composition/spatial" \
+  --group="panel_type,sample_short,donor_id" \
+  --colors="data/metadata/ruoyan_2024_suspension_cell_type_colour.csv" |
+  tee -a .logs/${LNAME}_file_id_$(date +%Y%m%d%H%M%S)
+
+############################################################
+logger_info "Comparing panel annotations" 60 "-" ###########
+############################################################
+
+FNAME="${PATH_PROJECT}/code/panel_annotations.R"; chmod +x ${FNAME}
+LNAME="$(file_log ${FNAME} ${PATH_PROJECT})"
+
+Rscript ${FNAME} --input="data/xenium-panels" \
+  --output="results/panels-10x_overlaps" |
+  tee -a .logs/${LNAME}_$(date +%Y%m%d%H%M%S)
+
+Rscript ${FNAME} --input="data/xenium-panels" \
+  --subset="results/panels-10x_overlaps/overlaps_table.csv" \
+  --output="results/panels-10x_overlaps" |
   tee -a .logs/${LNAME}_$(date +%Y%m%d%H%M%S)
 
 ${PKG_MAN} deactivate
+
+#endregion #####################################################################
 
 # Conclusions or post-processing steps
 

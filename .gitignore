@@ -48,6 +48,8 @@ vignettes/*.pdf
 *_cache/
 /cache/
 __pycache__/
+temp
+tmp
 
 # Big files and folders
 *.h5ad
@@ -77,3 +79,17 @@ Icon*
 ._*
 .TemporaryItems
 __MACOSX
+
+# envs, and miscellaneous
+code/chart_gantt.py
+envs/celltypist.yaml
+envs/funkyheatmap.yaml
+envs/pegasus.yaml
+envs/plots.yaml
+envs/rapids_singlecell.yaml
+envs/scanpy.yaml
+envs/scgen.yaml
+envs/scib.yaml
+envs/scib_accel.yaml
+envs/scqooc.yaml
+envs/scvi-tools.yaml

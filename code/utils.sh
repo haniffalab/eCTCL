@@ -28,7 +28,7 @@ elif [[ ! -z "$(command -v poetry)" ]]; then
   logger_info "Using poetry as the package manager"
   PKG_MAN="poetry"
 fi
-echo "${PKG_MAN}"
+echo "$(printf '@%.0s' {1..20}) ${PKG_MAN} $(printf '@%.0s' {1..20})"
 
 function on_error () {
   local line="$1"

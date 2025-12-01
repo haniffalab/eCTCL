@@ -7,7 +7,7 @@ fi
 # Create environment
 if [[ -z $(${PKG_MAN} env list | grep env_r) ]]; then
   echo "Creating environment 'env_r' with R essentials and base."
-  ${PKG_MAN} create -y -n env_r r-essentials r-base
+  ${PKG_MAN} create -y -n env_r -c conda-forge r-essentials r-base
 else
   echo "Environment 'env_r' already exists. Skipping creation."
 fi
@@ -24,3 +24,4 @@ Rscript -e "renv::init()"
 Rscript -e "renv::install('logging')"
 Rscript -e "renv::install('tidyverse')"
 Rscript -e "renv::install('optparse')"
+Rscript -e "renv::install('effectsize')"

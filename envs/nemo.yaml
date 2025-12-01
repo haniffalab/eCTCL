@@ -1,0 +1,7 @@
+# pip install
+name: nemo
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - pip

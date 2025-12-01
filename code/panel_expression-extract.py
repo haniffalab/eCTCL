@@ -98,7 +98,7 @@ def panel_fetch_expression(args, **kwargs):
         aedata_list.append(temp)
 
     logger.info("Concatenating genes and labels")
-    aedata_df = pd.concat(aedata_list)
+    aedata_df = pd.concat(aedata_list, axis=1)
 
     logger.info(f"Saving data to {output_dir}.csv") ## -------------------------
     output_dir.parent.mkdir(parents=True, exist_ok=True)

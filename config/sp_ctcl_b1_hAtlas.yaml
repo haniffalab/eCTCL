@@ -1,0 +1,26 @@
+DATASETS:
+  b1_hAtlas:
+    input:
+      merge:
+        DG14-SKI-0-FFPE-1-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG14-SKI-0-FFPE-1-S2.zarr
+        DG38-SKI-0-FFPE-2-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG38-SKI-0-FFPE-2-S2.zarr
+        DG16-SKI-0-FFPE-1-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG16-SKI-0-FFPE-1-S2.zarr
+        DG39-SKI-0-FFPE-1-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG39-SKI-0-FFPE-1-S2.zarr
+        DG18-SKI-0-FFPE-1-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG18-SKI-0-FFPE-1-S2.zarr
+        DG40-SKI-0-FFPE-1-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG40-SKI-0-FFPE-1-S2.zarr
+        DG19-SKI-0-FFPE-1-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG19-SKI-0-FFPE-1-S2.zarr
+        DG41-SKI-0-FFPE-1-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG41-SKI-0-FFPE-1-S2.zarr
+        DG21-SKI-0-FFPE-1-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG21-SKI-0-FFPE-1-S2.zarr
+        DG45-SKI-0-FFPE-2-S2: data/processed/sp_ctcl_b1_hAtlas_qc/DG45-SKI-0-FFPE-2-S2.zarr
+      preprocessing: merge
+      integration: preprocessing
+      metrics: integration 
+    
+    preprocessing:
+      normalize:
+        target_sum: 1000
+      highly_variable_genes:
+        n_top_genes: 2000
+      scale: true
+      pca:
+        n_comps: 100

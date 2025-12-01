@@ -29,20 +29,9 @@
 source("code/utils.R")
 # Basic packages -------------------------------------------
 # Logging configuration ------------------------------------
-red <- yellow <- cyan <- c
-if (requireNamespace("crayon", quietly = TRUE)) {
-  red <- crayon::red
-  yellow <- crayon::yellow
-  cyan <- crayon::cyan
-}
-logging::basicConfig()
-logger <- function(i, tail_n = 80, color = red) {
-  tail_n <- max(c(tail_n, nchar(i) + 1))
-  y <- paste("##", color(i), "##", base::strrep("%", tail_n - nchar(i)), "\n")
-  logging::loginfo(y)
-}
-logging::loginfo(red("Verbosity activated."))
+source("code/logger.R")
 # In-house/developing --------------------------------------
+source("code/plotting.R")
 # overlap_list
 url0 <- "https://raw.githubusercontent.com/cramsuig/"
 url <- paste0(url0, "handy_functions/refs/heads/master/devel/overlap.R")
@@ -58,7 +47,7 @@ glue <- stringr::str_glue
 indata_name <- "panels-10x"
 action_name <- "overlaps"
 result_name <- sprintf(
-  "%s_%s_%s", indata_name, action_name, format(Sys.time(), "%Y%m%d")
+  "%s_%s", indata_name, action_name
 )
 
 inputs_path <- "./data"
@@ -81,10 +70,10 @@ str(sapply(temp, function(x) get(x)))
 logger("Loading data") #########################################################
 ################################################################################
 
-logging::loginfo("Loading data.")
+logger_info("Loading data.")
 inputs_files <- list.files(inputs_fold, pattern = "*.csv", full.names = TRUE)
 panels_df <- lapply(inputs_files, readr::read_csv)
-names(panels_df) <- gsub("_metadata|.csv", "", basename(inputs_files))
+names(panels_df) <- gsub("_metadata|-.*", "", basename(inputs_files))
 
 ################################################################################
 logger("Pre-processing") #######################################################
@@ -123,51 +112,58 @@ outputs_list[["overlaps_table"]] <- sapply(
 logger("Post-processing") ######################################################
 ################################################################################
 
-# logger("Barplots per panel", 60, cyan)
-# column_annotation_0 <- c("Annotation", "cell_type")
-# for (panel_i in names(panels_list)) {
-#   fname <- glue("barplot_annotation_{panel_i}")
-#   # plotting number of genes per annotation
-#   column_annotation <- column_annotation_0[
-#     column_annotation_0 %in% colnames(panels_df[[panel_i]])
-#   ]
-#   outputs_list[[fname]] <- ggplot2::ggplot(
-#     data = panels_list[[panel_i]],
-#     mapping = ggplot2::aes(x = .data[[column_annotation]])
-#   ) + geom_bar(stat="bin") +
-#       theme_minimal()
-# }
-
 logger("Generating Venn Diagram (ggvenn)", 60, cyan)
 color_palette <- RColorBrewer::brewer.pal(
   name = "Set3", n = length(panels_list)
 )
+`%+replace%` <- ggplot2::`%+replace%`
 outputs_list[["overlaps_ggvenn"]] <- ggvenn::ggvenn(
   data = panels_list,
   fill_color = color_palette,
   stroke_size = 0.5, set_name_size = 5,
   show_percentage = TRUE
 ) +
-  ggplot2::theme_void() +
-  ggplot2::labs(title = "Overlapping genes in Xenium panels")
+  theme_global()$theme +
+  ggplot2::theme_void()
 
 logger("Generating Euler diagram (eulerr)", 60, cyan)
-p <- eulerr::euler(panels_list)
-fname <- file.path(output_resu, glue("overlaps_euler.pdf"))
+diagram <- eulerr::euler(panels_list)
+fname <- file.path(output_resu, glue("overlaps_euler.png"))
 # create directory if it does not exist
 if (!dir.exists(dirname(fname))) {
   dir.create(dirname(fname), recursive = TRUE)
 }
-pdf(fname);
+png(fname);
 plot(
-  p, counts = TRUE, font=1, cex=1, alpha=0.5,
+  diagram, counts = TRUE, font = 1, cex = 1, alpha = 0.5,
   fill = color_palette,
-  # quantities = TRUE,
   labels = list(size = 10, alpha = 0.5),
   quantities = list(size = 10),
   main = "Overlapping genes in Xenium panels"
 )
 graphics.off()
+
+# outputs_list[["overlaps_euler_do_call"]] <- list(
+#   "do.call" = list(
+#     what = plot,
+#     args = list(
+#       diagram, counts = TRUE, font = 1, cex = 1, alpha = 0.5,
+#       fill = color_palette,
+#       labels = list(size = 10, alpha = 0.5),
+#       quantities = list(size = 10),
+#       main = "Overlapping genes in Xenium panels"
+#     )
+#   ),
+#   type = ".png"
+# )
+
+# outputs_list[["overlaps_euler_ggplotify"]] <- ggplotify::as.ggplot(diagram) +
+#   theme_global()$theme + ggplot2::theme_void()
+
+outputs_list[["overlaps_euler_gg"]] <- ggeulerr(panels_list) +
+  ggplot2::scale_fill_manual(values = color_palette) +
+  ggplot2::labs(title = "Overlapping genes in Xenium panels") +
+  theme_global()$theme + ggplot2::theme_void()
 
 logger("Generating UpSet plot (UpSetR)", 60, cyan)
 p <- UpSetR::upset(
@@ -178,8 +174,8 @@ p <- UpSetR::upset(
   sets.bar.color = color_palette,
   point.size = 3.5
 )
-fname <- file.path(output_resu, glue("overlaps_upset.pdf"))
-pdf(fname);
+fname <- file.path(output_resu, glue("overlaps_upset.png"))
+png(fname);
 print(p)
 graphics.off()
 
@@ -209,43 +205,18 @@ logger("Conclusion") ###########################################################
 # difference between sets
 temp <- setdiff(res_overlap[[length(res_overlap)]], intersect_all_previous)
 temp <- paste(temp, collapse = ", ")
-logging::loginfo(glue("Missing in previous overlap: {temp}"))
+logger_info(glue("Missing in previous overlap: {temp}"))
 
 ################################################################################
 logger("Saving") ###############################################################
 ################################################################################
 
-temp <- length(outputs_list)
-logging::loginfo(glue("Saving {temp} files"))
-pflag <- " \033[1;32m√\033[0m"
-ftype <- "unknown"
-for (name_i in names(outputs_list)) {
-  item <- outputs_list[[name_i]]
-  fname <- file.path(output_resu, glue("{name_i}"))
-  eflag <- " \033[1;31mX\033[0m"
-  if (is.null(class(item))) next
-  if (ftype != paste0(class(item), collapse = "/")) {
-    ftype <- paste0(class(item), collapse = "/")
-  }
-  cat(glue("Storing {ftype}\n{fname}"))
-  # create directory if it does not exist
-  if (!dir.exists(dirname(fname))) {
-    dir.create(dirname(fname), recursive = TRUE)
-  }
-  # add extension and save based on class() # ----------------
-  if (any(class(item) %in% c("gg", "ggplot", "spec_tbl_df"))) {
-    suppressMessages(ggplot2::ggsave(
-      filename = paste0(fname, ".pdf"),
-      plot = outputs_list[[name_i]],
-      width = 10, height = 10
-    ))
-    eflag <- pflag
-  } else if (any(class(item) %in% c("data.frame"))) {
-    readr::write_csv(outputs_list[[name_i]], paste0(fname, ".csv"))
-    eflag <- pflag
-  } else if (any(class(item) %in% c("list"))) {
-    eflag <- pflag
-    saveRDS(outputs_list[[name_i]], paste0(fname, ".rds"))
-  }
-  print(glue("{eflag}"))
-}
+do.call(
+  output_save_list,
+  c(list(
+    OUTPUT_LIST = outputs_list,
+    OUTPUT_RESU = output_resu,
+    width = 5.7 * 4, height = 4.3 * 4,
+    unit = "cm"
+  ), theme_global()$args_ggsave)
+)

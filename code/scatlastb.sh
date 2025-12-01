@@ -13,9 +13,9 @@
 
 PATH_BASE=$([ -z "${PS1}" ] && echo $(dirname $0) || echo code)
 SOURCE_FILES=(
+  "${PATH_BASE}/utils.sh" # PKG_MAN, path_project
   "${PATH_BASE}/logger.sh" # logger_info
   "${HOME}/.conda/init.sh"
-  "${PATH_BASE}/utils.sh" # PKG_MAN, path_project
 )
 
 for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
@@ -41,7 +41,7 @@ export CONFIG_FILE=""
 filtered_args=()
 for arg in "$@"; do
   if [[ "$arg" == *.yaml ]]; then
-    CONFIG_FILE=$(realpath "$arg")
+    CONFIG_FILE+="$(realpath "$arg") "
     continue
   fi
   filtered_args+=("$arg")

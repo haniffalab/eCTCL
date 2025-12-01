@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 # __title: Utilities for the setting up projects.
 # created: 2025-08-17 Sun 14:16:01 BST
-# updated: 2025-08-17
+# updated: 2025-12-01
 # author:
 #   - name: Ciro Ramírez-Suástegui
 #     affiliation: The Wellcome Sanger Institute
@@ -178,30 +178,36 @@ function str_is_sim () {
 }
 
 function setup_data_copy () {
-  local -n PATH_SUBSETS="${1}"
-  local PATH_COPY="${2:-data/raw}"
-  local PATTERN="${3:-*output-*}"
-  local INCLUDE="${4:-.*}" # regex to include samples
-  local EXCLUDE="${5:-nothing2excludehere}" # regex to exclude samples
-  shift 2 # Parse named options
-  while [[ $# -gt 0 ]]; do
-      case $1 in
-          --pattern) PATTERN="${2}"; shift 2 ;;
-          --include) INCLUDE="${2}"; shift 2 ;;
-          --exclude) EXCLUDE="${2}"; shift 2 ;;
-          *) echo "Unknown option: $1"; return 1 ;;
-      esac
-  done
+  local -n PATH_SRCS="${1}"
+  local    PATH_COPY="${2:-data/raw}"
+  local    PATT_DIRS="${3:-*output-*}"
+  local    PATT_INCL="${4:-.*}" # regex to include samples
+  local    PATT_EXCL="${5:-nothing2excludehere}" # regex to exclude samples
+  shift 2 # Parse named options if "--" or " -" is found as substring
+  if [[ "$1" == "--" || "$1" == -* ]]; then
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --pattern) PATT_DIRS="${2}"; shift 2 ;;
+            --include) PATT_INCL="${2}"; shift 2 ;;
+            --exclude) PATT_EXCL="${2}"; shift 2 ;;
+            *) echo "Unknown option: $1"; return 1 ;;
+        esac
+    done
+  fi
   # if it does not end with an underscore, add a slash
+  echo "Parameters:"
+  echo " * Pattern: '${PATT_DIRS}'"
+  echo " * Include: '${PATT_INCL}'"
+  echo " * Exclude: '${PATT_EXCL}'"
   if [[ "${PATH_COPY}" != *_ ]]; then PATH_COPY="${PATH_COPY%/}/"; fi
-  for PATH_SUBSET_I in "${!PATH_SUBSETS[@]}"; do
-    PATH_SUBSET="${PATH_SUBSETS[${PATH_SUBSET_I}]}"
+  for PATH_SUBSET_I in "${!PATH_SRCS[@]}"; do
+    PATH_SUBSET="${PATH_SRCS[${PATH_SUBSET_I}]}"
     logger_info "'${PATH_SUBSET_I}' - '$(basename "${PATH_SUBSET}")'" 60 "-"
     CCOUNT=0; DCOUNT=0
     mkdir -p "${PATH_COPY}${PATH_SUBSET_I}"
     mapfile -t PATH_FIND < <(
-      find "${PATH_SUBSET}" -maxdepth 2 -name "${PATTERN}" -type d |
-      grep -E "${INCLUDE}" | grep -vE "${EXCLUDE}"
+      find "${PATH_SUBSET}" -maxdepth 2 -name "${PATT_DIRS}" -type d |
+      grep -E "${PATT_INCL}" | grep -vE "${PATT_EXCL}"
     )
     while read -r PATH_SAMPLE; do
       DCOUNT=$(($DCOUNT + 1))
@@ -221,10 +227,11 @@ function setup_data_copy () {
       CCOUNT=$(($CCOUNT + 1))
     done < <(printf '%s\n' "${PATH_FIND[@]}")
     printf "${CCOUNT}/${DCOUNT} copied\n"
+  done
 }
 
 function setup_data_copy_he () {
-    local -n PATH_SUBSETS="${1}"
+    local -n PATH_SRCS="${1}"
     local PATH_COPY="${2:-data/raw}"
     # Fetching the H&E data from upstream 'Post Xenium H&E' directory
     PATH_HE="$(path_find_up "Post" "${PATH_SUBSET}")"
@@ -294,8 +301,7 @@ function setup_data_copy_he () {
       # eval "${CMD}"
       unset SAMPLE_NAME; unset SAMPLE_NAME_PUTATIVE
       CCOUNT=$(($CCOUNT + 1)); unset color;
-    done < <(printf '%s\n' "${PATH_FIND[@]}")
-    printf "${CCOUNT}/${DCOUNT} images copied\n"
-    unset CCOUNT; unset DCOUNT;
-  done
+  done < <(printf '%s\n' "${PATH_FIND[@]}")
+  printf "${CCOUNT}/${DCOUNT} images copied\n"
+  unset CCOUNT; unset DCOUNT;
 }

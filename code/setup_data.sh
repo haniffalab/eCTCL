@@ -73,78 +73,26 @@ shopt -u nocasematch
 logger_info "Xenium data" ######################################################
 ################################################################################
 
-PATH_IMAGING="$(secret_vars "PATH_IMAGING" "${PATH_PROJECT}/data/variables.txt")"
-declare -A PATH_SUBSETS=(
-  ['hSkin-v1']="${PATH_IMAGING}/20240815_SGP177_hSkin_CTCL"
-  ['hImmune-v1']="${PATH_IMAGING}/20241115_SGP206_hImmunoOnc_CTCL_WARTS"
-  ['hAtlas-v1.1']="${PATH_IMAGING}/20250227_SGP218_5K_BCN+CTCL_FFPE/CTCL FFPE"
+PATH_IMG_BASE="$(secret_vars "PATH_IMAGING" "${PATH_PROJECT}/data/variables.txt")"
+declare -A PATH_IMAGING=(
+  ['b0_hSkin']="${PATH_IMG_BASE}/20240815_SGP177_hSkin_CTCL"
+  ['b0_hImmune']="${PATH_IMG_BASE}/20241115_SGP206_hImmunoOnc_CTCL_WARTS"
+  ['b0_hAtlas']="${PATH_IMG_BASE}/20250227_SGP218_5K_BCN+CTCL_FFPE/CTCL FFPE"
+  ['pr_hAtlas']="${PATH_IMG_BASE}/20250724_SGP273_5K_CTCL_Run1"
 )
-DTYPE=xenium
-DNAME="CTCL"
-PATH_COPY=${PATH_SCRATCH}/data/raw/${DTYPE}_${DNAME}
-INCLUDE="AX.*SKI|P677|p677"
+# "SGP219|SGP238|SGP245|SGP279|SGP247"
 
-for PATH_SUBSET_I in "${!PATH_SUBSETS[@]}"; do
-  PATH_SUBSET="${PATH_SUBSETS[${PATH_SUBSET_I}]}"
-  logger_info "Copying '${PATH_SUBSET_I}' - '$(basename "${PATH_SUBSET}")'" 40 "-"
-  CCOUNT=0; DCOUNT=0
-  while read -r PATH_SAMPLE; do
-    DCOUNT=$(($DCOUNT + 1))
-    echo " * '$(basename "${PATH_SAMPLE}")'"
-    mkdir -p "${PATH_COPY}_${PATH_SUBSET_I}"
-    if [[ -d "${PATH_COPY}_${PATH_SUBSET_I}/$(basename "${PATH_SAMPLE}")" ]]; then
-      continue
-    fi
-    # can't access it from a node, so we need to copy instead of link
-    # ln -s "${PATH_SAMPLE/%\//}" "${PATH_SAMPLE1}"
-    rsync -auvh --progress --exclude "analysis" "${PATH_SAMPLE/%\//}" "${PATH_COPY}_${PATH_SUBSET_I}/"
-    CCOUNT=$(($CCOUNT + 1))
-  done <<< "$(
-    find "${PATH_SUBSET}" -maxdepth 1 -name "*output*" -type d | grep -E "${INCLUDE}"
-  )"
-  printf "${CCOUNT}/${DCOUNT} copied '${PATH_COPY}_${PATH_SUBSET_I}'\n"
-done
-
-logger_info "Pooling into one location" 40
-mkdir -p "${PATH_COPY}" # all in one
-for PATH_SUBSET in `ls -d ${PATH_COPY}_*`; do
-  echo " * '$(basename "${PATH_SUBSET}")'"
-  for PATH_SAMPLE in `ls -d ${PATH_SUBSET}/*`; do
-    PATH_COPY_SAMPLE="${PATH_COPY}/$(basename ${PATH_SAMPLE})"
-    echo " - '$(basename "${PATH_SAMPLE}")'"
-    if [[ ! -L "${PATH_COPY_SAMPLE}" ]]; then
-      ln -s "${PATH_SAMPLE}" "${PATH_COPY}/"
-    fi
-  done
-done
+setup_data_copy "PATH_IMAGING" \
+  "${PATH_SCRATCH}/data/raw/sp_ctcl" \
+  "*output-*" \
+  "AX.*SKI|P677|p677|DG.*SK" # include
 
 ################################################################################
-logger_info "Commands to copy data to local machine" ###########################
-################################################################################
-
-TEMP="${PATH_PROJECT}/src/cellranger_rsync.sh"
-printf '
-We are sending the data to a local machine using rsync.
-Copying data to local machine commands: "'${TEMP}'".\n
-'
-
-echo "#!/usr/bin/env bash" > "${TEMP}"
-PATH_DATA=($(ls -d ${PATH_PROJECT}/data/raw/${DTYPE}_${DNAME}/*))
-# iterate the first three elements of PATH_DATA
-for PATH_I in "${PATH_DATA[@]}"; do
-  echo PATH_I="${PATH_I}" >> "${TEMP}"
-  echo rsync -auvh --progress \
-    --exclude-from='"config/cellranger_exclude.txt"' \
-    "${USER}@${HOSTNAME}:\${PATH_I}/" \
-    "\${PATH_I/#\${PATH_PROJECT}\//}/" >> "${TEMP}"
-done
-
-################################################################################
-logger_info "Fetch suspension data" #################################################
+logger_info "Fetch suspension data" ############################################
 ################################################################################
 
 URL="https://storage.googleapis.com/haniffalab/ctcl/CTCL_all_final_portal_tags.h5ad"
-PATH_DATA="${PATH_SCRATCH}/data/processed/ruoyan_2024_suspension.h5ad"
+PATH_DATA="${PATH_SCRATCH}/data/processed/suspension_ruoyan_2024_ctcl.h5ad"
 
 if [[ ! -f "${PATH_DATA}" ]]; then
   download_data "${URL}" "${PATH_DATA}"

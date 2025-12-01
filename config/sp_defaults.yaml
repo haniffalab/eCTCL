@@ -1,0 +1,75 @@
+output_dir: results/scAtlasTb
+images: results/scAtlasTb
+
+os: intel
+use_gpu: true
+
+defaults:
+  # module configuration
+  preprocessing:
+    raw_counts: X
+    normalize:
+      target_sum: 100
+    highly_variable_genes:
+      n_top_genes: 2000
+    scale: true
+    pca:
+      n_comps: 379
+    neighbors:
+      n_neighbors: 16
+    umap:
+      neighbors_key: neighbors
+    assemble:
+      - normalize
+      - highly_variable_genes
+      - pca
+      - neighbors
+      - umap
+    colors:
+      - file_id
+      - log1p_total_counts
+  
+  clustering:
+    algorithm: louvain
+    resolutions:
+      - 0.1
+      - 0.4
+      - 0.8
+
+  integration:
+    raw_counts: layers/counts
+    norm_counts: layers/normcounts
+    batch: file_id
+    methods:
+      unintegrated:
+      harmonypy:
+        key: file_id
+        n_comps:
+          - 10
+      scvi:
+        n_hidden: 128
+
+  metrics:
+    unintegrated: layers/normcounts
+    raw_counts: layers/counts
+    corrected: X
+    label:
+      - louvain_0.1_1
+    batch:
+      - file_id
+    metrics:
+      - nmi
+      - ari
+      - asw_label
+      - asw_batch
+      - cell_cycle
+      - clisi
+      - ilisi
+      - graph_connectivity
+      # - isolated_label_asw
+      - isolated_label_f1
+      # - pcr_comparison
+      # - kbet_pg
+
+output_map:
+  preprocessing: results/scAtlasTb/preprocessing/dataset~{dataset}/file_id~{file_id}/preprocessed.zarr

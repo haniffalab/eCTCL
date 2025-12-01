@@ -1,0 +1,6 @@
+resources:
+  cpu:
+    partition: normal
+  gpu:
+    gpu_spec: "num={resources.threads}:gmem={resources.mem}:mode=shared"
+    partition: gpu-normal

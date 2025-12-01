@@ -26,6 +26,7 @@
 # Quick installations --------------------------------------
 source("code/utils.R")
 # Basic packages -------------------------------------------
+source("code/plotting.R")
 # Logging configuration ------------------------------------
 logging::basicConfig()
 logger <- function(i, tail_n = 60, color = crayon::cyan) {
@@ -55,7 +56,7 @@ plot_heatmap <- function(x_matrix) {
       position = ggplot2::position_nudge(y = 0.25)
     ) +
     ggplot2::scale_fill_gradient(low = "white", high = "red") +
-    ggplot2::theme_minimal() +
+    theme_global()$theme +
     ggplot2::theme(
       axis.text.x = ggplot2::element_text(angle = 90, hjust = 1),
       axis.title = ggplot2::element_blank(),
@@ -76,12 +77,33 @@ option_list <- list(
     type = "character",
     help = "Input path(s) of Ranger output."
   ),
+  optparse::make_option(c("-i", "--include"),
+    type = "character", default = NULL,
+    help = "Pattern to include."
+  ),
+  optparse::make_option(c("-e", "--exclude"),
+    type = "character", default = NULL,
+    help = "Pattern to exclude."
+  ),
   optparse::make_option(c("-v", "--verbose"),
     type = "integer", default = 0,
     help = "Verbosity level (0=quiet, 1=verbose, 2=debug)."
   )
 )
 opt <- optparse::parse_args(optparse::OptionParser(option_list = option_list))
+
+# opt$input <- paste0(
+#   "/nfs/t298_imaging/0XeniumExports/",
+#   c(
+#     "20250210_SGP219_5K_DERMATLAS",
+#     "20250404_SGP238_5K_DERMATLAS",
+#     "20250602_SGP247_5K_DERMATLAS",
+#     "20250610_SGP245_5K_DERMATLAS",
+#     "20250227_SGP218_5K_BCN+CTCL_FFPE/CTCL FFPE",
+#     "20250724_SGP273_5K_CTCL_Run1"
+#   )
+# )
+opt$exclude <- "-TI-"
 
 ## Global variables and paths ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%
 temp <- "Summarising Ranger metrics..."
@@ -107,33 +129,57 @@ str(sapply(temp, function(x) get(x)))
 
 ## Loading data ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%
 # List folders and filter for samples of interest
+print(glue("Input files:\n{inputs_file}"))
 `%>%` <- dplyr::`%>%`
 metrics_files <- inputs_file %>%
-  list.dirs(recursive = FALSE) %>%
-  # stringr::str_subset("0032785|FFPE") %>%
+  list.dirs(recursive = TRUE) %>%
   list.files(pattern = "metrics_summary.csv", full.names = TRUE)
 
 panel_files <- inputs_file %>%
-  list.dirs(recursive = FALSE) %>%
-  # stringr::str_subset("0032785|FFPE") %>%
+  list.dirs(recursive = TRUE) %>%
   list.files(pattern = "gene_panel.json", full.names = TRUE)
 
+if (!is.null(opt$include)) {
+  print(glue("Including only files with pattern: {opt$include}"))
+  metrics_files <- metrics_files[grepl(opt$include, metrics_files)]
+  panel_files <- panel_files[grepl(opt$include, panel_files)]
+}
+
+if (!is.null(opt$exclude)) {
+  print(glue("Excluding files with pattern: {opt$exclude}"))
+  metrics_files <- metrics_files[!grepl(opt$exclude, metrics_files)]
+  panel_files <- panel_files[!grepl(opt$exclude, panel_files)]
+}
 # reading json files
+print(glue("Reading {length(metrics_files)} metrics files"))
 metrics_df <- metrics_files %>% readr::read_csv()
 panel_info <- panel_files %>% purrr::map(jsonlite::fromJSON)
 
 ## Pre-processing ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%
 # remove columns with all NAs
 metrics_df <- metrics_df %>% dplyr::select(-dplyr::where(~ all(is.na(.))))
+metrics_df$panel_name <- gsub("Xenium Human ", "", metrics_df$panel_name)
 outputs_list[["table"]] <- metrics_df
+run_names <- unique(metrics_df$run_name)
+# using a grey scale but highlighting one run specifically
+run_name_colors <- grDevices::grey.colors(
+  length(run_names), start = 0.5, end = 0.8
+)
+names(run_name_colors) <- run_names
+if ("SGP273_Run1" %in% run_names) {
+  run_name_colors["SGP273_Run1"] <- "#00796B"
+}
+if ("SGP218_run1" %in% run_names) {
+  run_name_colors["SGP218_run1"] <- "#80CBC4"
+}
 
 ## Main ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%
 # Plotting numeric metrics
 temp <- sapply(metrics_df, function(x) is.numeric(x) || is.integer(x))
-plot_columns <- colnames(metrics_df)[temp]
+all_columns <- colnames(metrics_df)[temp]
 # divide by target genes (panel size)
 panel_size <- sapply(panel_info, function(x) x$payload$panel$num_gene_targets )
-for (i in plot_columns) {
+for (i in all_columns) {
   if (grepl("gene|transcript", i)) {
     cat(glue("Normalising '{i}' by panel size\n\n"))
     metrics_df[[glue("{i}_by_panel_size")]] <- metrics_df[[i]] / panel_size
@@ -142,26 +188,100 @@ for (i in plot_columns) {
 
 # also grabbing the normalised columns
 temp <- grep("_by_panel_size", colnames(metrics_df), value = TRUE)
-plot_columns <- unique(c(plot_columns, temp))
+plot_columns <- unique(c(all_columns[grepl("cell", all_columns)], temp))
 
-# Plotting bar plots for each metric
+logger("Plotting bars for each metric")
 for (col in plot_columns) {
   temp <- gsub("_", "-", col)
   fname <- glue("barplot_{temp}")
-  # creating bar plots
-  plot_aes <- ggplot2::aes(x = region_name, y = !!rlang::sym(col))
+  # creating bars
+  plot_aes <- ggplot2::aes(
+    x = region_name, y = !!rlang::sym(col),
+    fill = run_name
+  )
   outputs_list[[fname]] <- ggplot2::ggplot(
     data = metrics_df, mapping = plot_aes
   ) +
-    ggplot2::geom_bar(stat = "identity") +
-    ggplot2::facet_wrap(facets = ~run_name + panel_name, scale = "free_x") +
-    ggplot2::theme_minimal() +
+    ggplot2::geom_bar(
+      stat = "identity", width = 0.8,
+      position = ggplot2::position_dodge2(width = 0.8, preserve = "single")
+    ) +
+    ggplot2::facet_grid(
+      cols = ggplot2::vars(run_name, panel_name),
+      scale = "free_x", space = "free",
+      labeller = ggplot2::label_wrap_gen(15)
+    ) +
+    # ggplot2::scale_fill_grey(start = 0.5, end = 0.8) +
+    ggplot2::scale_fill_manual(values = run_name_colors) +
+    theme_global()$theme +
     ggplot2::theme(
-      axis.text.x = ggplot2::element_text(vjust = 0.5, angle = 90)
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 0.85)
     )
 }
 
-logger("Checkig overlap between panels")
+logger("Plotting boxplots for each metric")
+for (col in plot_columns) {
+  temp <- gsub("_", "-", col)
+  fname <- glue("boxplot_{temp}")
+  # creating boxplots
+  plot_aes <- ggplot2::aes(
+    x = run_name, y = !!rlang::sym(col),
+    fill = run_name
+  )
+  outputs_list[[fname]] <- ggplot2::ggplot(
+    data = metrics_df, mapping = plot_aes
+  ) +
+    ggplot2::geom_boxplot() +
+    # add points
+    ggplot2::geom_jitter(
+      position = ggplot2::position_jitter(width = 0.2),
+      size = 2, alpha = 0.7
+    ) +
+    ggplot2::facet_wrap(
+      ggplot2::vars(panel_name),
+      scales = "free_x",
+      labeller = ggplot2::label_wrap_gen(15)
+    ) +
+    ggplot2::scale_fill_manual(values = run_name_colors) +
+    theme_global()$theme +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 0.85),
+      legend.position = "none"
+    )
+}
+
+logger("Plotting scatters for preselected metrics")
+preselected_metrics <- grep(
+  "median_genes|num_cells|median_transcripts",
+  plot_columns, value = TRUE
+)
+print(preselected_metrics)
+comb_list <- combn(preselected_metrics, 2, simplify = FALSE)
+for (col_pair in comb_list) {
+  logger(glue("Plotting scatter for {col_pair[1]} vs {col_pair[2]}"))
+  temp <- gsub("_", "-", paste(col_pair, collapse = "_vs_"))
+  fname <- glue("scatter_{temp}")
+  plot_aes <- ggplot2::aes(
+    x = !!rlang::sym(col_pair[1]),
+    y = !!rlang::sym(col_pair[2]),
+    color = run_name,
+  )
+  outputs_list[[fname]] <- ggplot2::ggplot(
+    data = metrics_df, mapping = plot_aes
+  ) +
+    ggplot2::geom_point(size = 3) +
+    ggplot2::scale_color_manual(values = run_name_colors) +
+    # adding more breaks on axes
+    ggplot2::scale_x_continuous(n.breaks = 7) +
+    ggplot2::scale_y_continuous(n.breaks = 7) +
+    theme_global()$theme +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+      legend.position = "none"
+    )
+}
+
+logger("Checking overlap between panels")
 n_targets <- max(sapply(
   panel_info, function(x) x$payload$panel$num_gene_targets
 ))
@@ -191,48 +311,31 @@ panel_intersection <- intersect(out_df[, 1], out_df[, ncol(out_df)])
 temp <- !panel_info[[1]]$payload$targets$type$data$id %in% panel_intersection
 head(panel_info[[1]]$payload$targets$type$data[temp, 2])
 
-outputs_list[["overlap"]] <- plot_heatmap(overlaps_comb)
-outputs_list[["overlap-percentages"]] <- plot_heatmap(overlaps_comb_pct)
+# outputs_list[["overlap"]] <- plot_heatmap(overlaps_comb)
+# outputs_list[["overlap-percentages"]] <- plot_heatmap(overlaps_comb_pct)
 
 ## Conclusions ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 temp <- paste0(names(outputs_list), collapse = "\n")
 logging::loginfo(glue("Produced files:\n{temp}"))
 outputs_list <- outputs_list[!grepl("testplot", names(outputs_list))]
 
-## Save ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%
-temp <- length(outputs_list)
-logging::loginfo(glue("Saving {temp} files"))
-pflag <- " \033[1;32m√\033[0m"
-ftype <- "unknown"
-for (name_i in names(outputs_list)) {
-  item <- outputs_list[[name_i]]
-  fname <- file.path(output_resu, glue("{name_i}"))
-  eflag <- " \033[1;31mX\033[0m"
-  if (is.null(class(item))) next
-  if (ftype != paste0(class(item), collapse = "/")) {
-    ftype <- paste0(class(item), collapse = "/")
-  }
-  cat(glue("Storing {ftype}\n{fname}"))
-  # create directory if it does not exist
-  if (!dir.exists(dirname(fname))) {
-    dir.create(dirname(fname), recursive = TRUE)
-  }
-  # add extension and save based on class() # ----------------
-  if (any(class(item) %in% c("gg", "ggplot", "spec_tbl_df"))) {
-    suppressMessages(ggplot2::ggsave(
-      filename = paste0(fname, ".pdf"),
-      plot = outputs_list[[name_i]],
-      width = 10, height = 10
-    ))
-    eflag <- pflag
-  } else if (any(class(item) %in% c("data.frame"))) {
-    readr::write_csv(outputs_list[[name_i]], paste0(fname, ".csv"))
-    eflag <- pflag
-  } else if (any(class(item) %in% c("list"))) {
-    eflag <- pflag
-    saveRDS(outputs_list[[name_i]], paste0(fname, ".rds"))
-  }
-  print(glue("{eflag}"))
-}
 
-logging::loginfo(crayon::bold(crayon::red("Done.")))
+## Save ## @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%
+do.call(
+  output_save_list,
+  c(list(
+    OUTPUT_LIST = outputs_list[grepl("barplot", names(outputs_list))],
+    OUTPUT_RESU = output_resu,
+    width = 3 * length(run_names), height = 10,
+    unit = "cm"
+  ), theme_global()$args_ggsave)
+)
+do.call(
+  output_save_list,
+  c(list(
+    OUTPUT_LIST = outputs_list[!grepl("barplot", names(outputs_list))],
+    OUTPUT_RESU = output_resu,
+    width = 4.3 * 3, height = 4.3 * 3,
+    unit = "cm"
+  ), theme_global()$args_ggsave)
+)
