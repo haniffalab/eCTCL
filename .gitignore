@@ -15,6 +15,7 @@
 .Renviron
 renv/
 .Rprofile
+**/.solosis
 
 # User-specific files
 .Ruserdata
@@ -51,6 +52,16 @@ __pycache__/
 temp
 tmp
 
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+*,cover
+coverage.xml
+
+# Sphinx
+sphinx/_build
+
 # Big files and folders
 *.h5ad
 .RData
@@ -79,6 +90,14 @@ Icon*
 ._*
 .TemporaryItems
 __MACOSX
+
+# Flask
+.DS_Store
+.env
+.venv
+.flaskenv
+*.pyc
+*.pyo
 
 # envs, and miscellaneous
 code/chart_gantt.py
