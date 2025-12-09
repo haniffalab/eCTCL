@@ -6,7 +6,7 @@
 #          Xenium data from CTCL samples.
 #
 # created: 2025-05-29 Thu 10:26:31 BST
-# updated: 2025-07-24
+# updated: 2025-12-09
 #
 # maintainer: Ciro Ramírez-Suástegui
 # author:
@@ -19,7 +19,7 @@
 # LNAME=$(echo "${FNAME/%.*/}" | sed 's|'"$(dirname ${PWD})/"'||' | tr '/' '.')
 # bash ${FNAME} 2>&1 | tee -a .logs/${LNAME}_$(date +%Y%m%d%H%M%S)
 # Interactively:
-# export P1="b1_hAtlas"; export PDEBUG="debug"; source code/xenium_workflow.sh
+# export P1="SGP273_RUN1"; export PDEBUG="debug"; source code/xenium_workflow.sh
 # eval "$(sed -n '/PATTERN_BEGIN/,/PATTERN_END/p' code/xenium_workflow.sh)"
 
 printf '\n%s\n' '
@@ -52,7 +52,7 @@ unset logger; unset logger_info
 logger_info () { logger -t "INFO [$(basename "$0"):$LINENO]" -s "$@"; }
 
 ## Source files --------------------------------------------
-[ -z "${PS1:-}" ] && export PATH_BASE="$(dirname "$0")" || export PATH_BASE=code
+[ -z "${PS1:-}" ] && export PATH_BASE="$(dirname "$0")" || export PATH_BASE=codes/${USER}
 logger_info "Using base path: ${PATH_BASE}"
 
 SOURCE_FILES=(
@@ -69,7 +69,7 @@ for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
     source "${HOME}/${SOURCE_FILE}"
   fi
   file_sync "${SOURCE_FILE}" # update project's
-  file_sync "${HOME}/${SOURCE_FILE}" "${SOURCE_FILE}" # update original
+  file_sync "original" "${SOURCE_FILE}" # update original
 done
 
 ################################################################################
@@ -81,12 +81,12 @@ PATH_PROJECT="$(path_project)"
 # Selecting subset of the dataset
 case "${P1}" in
   # exclude skin and 5K panel -> take immuno-oncology samples - EXCLUDE="20240815|20250227";
-  "b0_hImmune") DATASET_SUB="b0_hImmune"; RMEM=(5000 6000);;
+  "SGP206_RUN1") DATASET_SUB="SGP206_RUN1"; RMEM=(5000 6000);;
   # exclude immuno-oncology, 5K panel -> take skin samples - EXCLUDE="20241115|20250227";
-  "b0_hSkin") DATASET_SUB="b0_hSkin"; RMEM=(5000 15000);;
+  "SGP177_RUN1") DATASET_SUB="SGP177_RUN1"; RMEM=(5000 15000);;
   # exclude skin and immuno-oncology -> take 5K samples - EXCLUDE="20240815|20241115";
-  "b0_hAtlas") DATASET_SUB="b0_hAtlas"; RMEM=(25000 40000);;
-  "b1_hAtlas") DATASET_SUB="b1_hAtlas"; RMEM=(25000 40000);;
+  "SGP218_RUN1") DATASET_SUB="SGP218_RUN1"; RMEM=(25000 40000);;
+  "SGP273_RUN1") DATASET_SUB="SGP273_RUN1"; RMEM=(25000 40000);;
 esac
 
 PATH_RAW="${PATH_PROJECT}/data/raw"
@@ -164,7 +164,7 @@ else
 fi
 
 Rscript ${PATH_PROJECT}/code/ranger_summary.R --name="sp_ctcl_hAtlas" \
-    --input="${PATH_RAW}/sp_ctcl" --include="hAtlas"
+    --input="${PATH_RAW}/sp_ctcl" --include="SGP218|SGP273"
 
 # This will be hardcoded for now, as we want to compare two specific datasets
 TEMP="${PATH_PROJECT}/eCTCL/data/raw/xenium_CTCL_hImmune-v1,\

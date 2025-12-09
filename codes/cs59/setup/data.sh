@@ -4,15 +4,15 @@
 # __title: Data copy.
 # purpose: This is a template of best practices for a well structured script.
 # created: 2025-05-29 Thu 10:40:25 BST
-# updated: 2025-07-24
+# updated: 2025-12-09
 # author:
 #   - name: Ciro Ramírez-Suástegui
 #     affiliation: The Wellcome Sanger Institute
 #     email: cs59@sanger.ac.uk, cramsuig@gmail.com
 # ------------------------------------------------------------------------------
-# eval "$(grep -B 100 "Xenium data" code/setup_data.sh)"
-# export PDEBUG="debug"; source code/setup_data.sh
-# eval "$(sed -n '/PATTERN_BEGIN/,/PATTERN_END/p' code/setup_data.sh)"
+# eval "$(grep -B 100 "Xenium data" codes/${USER}/setup/data.sh)"
+# export PDEBUG="debug"; source codes/${USER}/setup/data.sh
+# eval "$(sed -n '/PATTERN_BEGIN/,/PATTERN_END/p' codes/${USER}/setup/data.sh)"
 
 ################################################################################
 ## Environment setup ###########################################################
@@ -29,13 +29,13 @@ unset logger; unset logger_info
 logger_info() { logger -t "INFO [$(basename "$0"):$LINENO]" -s "$@"; }
 
 ## Source files --------------------------------------------
-[ -z "${PS1:-}" ] && export PATH_BASE="$(dirname "$0")" || export PATH_BASE=code
+[ -z "${PS1:-}" ] && export PATH_BASE="$(dirname "$0")" || export PATH_BASE=codes/${USER}
 logger_info "Using base path: ${PATH_BASE}"
 
 SOURCE_FILES=(
   "${PATH_BASE}/logger.sh" # logger_*
   "${PATH_BASE}/utils.sh"  # file_sync, path_project, secret_*
-  "${PATH_BASE}/utils_setup.sh"  # download_data
+  "${PATH_BASE}/setup/utils.sh"  # download_data, setup_data_copy
 )
 
 for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
@@ -45,8 +45,8 @@ for SOURCE_FILE in "${SOURCE_FILES[@]}"; do
      [[ -f "${HOME}/${SOURCE_FILE}" ]]; then
     source "${HOME}/${SOURCE_FILE}"
   fi
-  file_sync "${SOURCE_FILE}" # update project's
-  file_sync "${HOME}/${SOURCE_FILE}" "${SOURCE_FILE}" # update original
+  file_sync "${SOURCE_FILE}" # update project's code from original
+  file_sync "original" "${SOURCE_FILE}" # update original
 done
 
 ################################################################################
@@ -59,8 +59,6 @@ PATH_SCRATCH="${PATH_SCRATCH}/$(basename ${PATH_PROJECT})"
 
 logger_info "Working at: '$(secret_path ${PWD})'" 0
 logger_info "Project: '$(secret_path ${PATH_PROJECT})'" 0
-
-bash ${HOME}/code/project_create.sh "${PATH_PROJECT}" "${PATH_SCRATCH}"
 
 shopt -s nocasematch
 if [[ -n "${PDEBUG}" ]]; then
@@ -75,19 +73,19 @@ logger_info "Xenium data" ######################################################
 
 PATH_IMG_BASE="$(secret_vars "PATH_IMAGING" "${PATH_PROJECT}/data/variables.txt")"
 declare -A PATH_IMAGING=(
-  ['b0_hSkin']="${PATH_IMG_BASE}/20240815_SGP177_hSkin_CTCL"
-  ['b0_hImmune']="${PATH_IMG_BASE}/20241115_SGP206_hImmunoOnc_CTCL_WARTS"
-  ['b0_hAtlas']="${PATH_IMG_BASE}/20250227_SGP218_5K_BCN+CTCL_FFPE/CTCL FFPE"
-  ['b1_hAtlas']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20250724_SGP273_5K_CTCL_Run1"
-  ['b2_hAtlas']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20251110__143927__SGP273_run2"
-  ['b3_hAtlas']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20251110__142107__SGP273_run3"
-  ['b3_hAtlas']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20251117__133339__SGP273_run4"
-  ['b5_hAtlas']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20251117__140414__SGP273_run5"
+  ['SGP177_RUN1']="${PATH_IMG_BASE}/20240815_SGP177_hSkin_CTCL"
+  ['SGP206_RUN1']="${PATH_IMG_BASE}/20241115_SGP206_hImmunoOnc_CTCL_WARTS"
+  ['SGP218_RUN1']="${PATH_IMG_BASE}/20250227_SGP218_5K_BCN+CTCL_FFPE/CTCL_FFPE"
+  ['SGP273_RUN1']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20250724_SGP273_5K_CTCL_Run1"
+  ['SGP273_RUN2']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20251110__143927__SGP273_run2"
+  ['SGP273_RUN3']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20251110__142107__SGP273_run3"
+  ['SGP273_RUN4']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20251117__133339__SGP273_run4"
+  ['SGP273_RUN5']="${PATH_IMG_BASE}/20250724_SGP273_5K_earlyCTCL/20251117__140414__SGP273_run5"
 )
 # "SGP219|SGP238|SGP245|SGP279|SGP247"
 
 setup_data_copy "PATH_IMAGING" \
-  "${PATH_SCRATCH}/data/raw/sp_ctcl" \
+  "intermediate/nobackup_data/sp_ctcl" \
   "*output-*" \
   "AX.*SKI|P677|p677|DG.*SK" # include
 

@@ -195,11 +195,12 @@ function setup_data_copy () {
     done
   fi
   # if it does not end with an underscore, add a slash
+  if [[ "${PATH_COPY}" != *_ ]]; then PATH_COPY="${PATH_COPY%/}/"; fi
   echo "Parameters:"
+  echo " * Destination: '${PATH_COPY}'"
   echo " * Pattern: '${PATT_DIRS}'"
   echo " * Include: '${PATT_INCL}'"
   echo " * Exclude: '${PATT_EXCL}'"
-  if [[ "${PATH_COPY}" != *_ ]]; then PATH_COPY="${PATH_COPY%/}/"; fi
   for PATH_SUBSET_I in "${!PATH_SRCS[@]}"; do
     PATH_SUBSET="${PATH_SRCS[${PATH_SUBSET_I}]}"
     logger_info "'${PATH_SUBSET_I}' - '$(basename "${PATH_SUBSET}")'" 60 "-"
