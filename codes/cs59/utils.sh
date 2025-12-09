@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 # __title: Utilities for the project.
 # created: 2025-06-03 Tue 15:57:38 BST
-# updated: 2025-08-17
+# updated: 2025-12-09
 # author:
 #   - name: Ciro Ramírez-Suástegui
 #     affiliation: The Wellcome Sanger Institute
@@ -51,11 +51,11 @@ function secret_vars () {
 }
 
 function secret_path () {
-  # If not interactive, return the full path
+  # If interactive, return the full path
   if [[ $- == *i* ]]; then
     echo "${1}"
   else
-    echo "${1}" | sed 's|.*'"${2:-${USER}}"'|~|'
+    echo "${1}" | sed 's|.*'"${2:-${USER}}"'|...|'
   fi
 }
 
@@ -73,27 +73,35 @@ function path_project () {
 }
 
 function file_sync () {
-  local SOURCE0=${2:-${HOME}/${1}}
-  if [[ ! -f ${SOURCE0} ]]; then
-    echo "🔹 Skipping file_sync: source file '${SOURCE0}' not found." >&2
+  if [[ $1 == "original" ]]; then
+    local P0="${2}"
+    local PT1="$(echo ${2} | sed 's|'"${USER}"'||g; s/codes/code/g')"
+    local P1="${HOME}/${PT1}"
+  else
+    local P1="${1}"
+    local PT1="$(echo ${1} | sed 's|'"${USER}"'||g; s/codes/code/g')"
+    local P0="${2:-${HOME}/${PT1}}"
+  fi
+  echo "Syncing file from '${P0}' to '${P1}'"
+  if [[ ! -f ${P0} ]]; then
+    echo "🔹 Skipping file_sync: source file '${P0}' not found." >&2
     return 0
-  fi # copy if source is newer than ${1} (destination) or ${1} does not exist
-  if [[ "${SOURCE0}" -nt "${1}" ]] || [[ ! -f ${1} ]]; then
+  fi # copy if source is newer than ${P1} (destination) or ${P1} does not exist
+  if [[ "${P0}" -nt "${P1}" ]] || [[ ! -f ${P1} ]]; then
     TEMP=$(mktemp); touch -d"-2min" ${TEMP}
-    # [ "${1}" -nt ${TEMP} ] && echo "'${1}' just changed, skipping." && return 0
-    if [[ -f "${1}" ]]; then diff --unified=0 "${1}" "${SOURCE0}"; fi
-    if [[ ! -d $(dirname "${1}") ]]; then
-      echo "🔹 Skipping file_sync: destination directory does not exist." >&2
+    if [[ -f "${P1}" ]]; then diff --unified=0 "${P1}" "${P0}"; fi
+    if [[ ! -d $(dirname "${P1}") ]]; then
+      echo "🔹 Skipping file_sync: '$(dirname "${P1}")' does not exist." >&2
       return 0
     fi
-    cmp -s "${SOURCE0}" "${1}" && echo "Identical files, skipping." && return 0
+    cmp -s "${P0}" "${P1}" && echo "Identical files, skipping." && return 0
     local SHELLOPT_E_WAS_SET=false
     if [[ "$-" == *e* ]]; then SHELLOPT_E_WAS_SET=true; set +e; fi
-    read -t 20 -p "Do you want to update '${1}'? [y/n]: " ANSWER
+    read -t 20 -p "Do you want to update '${P1}'? [y/n]: " ANSWER
     $SHELLOPT_E_WAS_SET && set -e
     if [[ "${ANSWER}" =~ ^[Yy]$ ]]; then
-      logger "Updating from ${SOURCE0}"
-      rsync -auvh --progress "${SOURCE0}" "${1}"
+      logger "Updating from ${P0}"
+      rsync -auvh --progress "${P0}" "${P1}"
     fi
   fi
 }
